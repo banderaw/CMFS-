@@ -20,7 +20,10 @@ ALLOWED_HOSTS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://verbose-fiesta-r4p5rqw5jgw6fgx4-8000.app.github.dev",
     "https://localhost:8000",
-    "https://127.0.0.1:3000",
+    "https://127.0.0.1:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    
 
 ]
 
@@ -186,8 +189,6 @@ AUTHENTICATION_BACKENDS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [

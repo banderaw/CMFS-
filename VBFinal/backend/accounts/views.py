@@ -3,10 +3,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils import timezone
+from django.conf import settings
+from datetime import timedelta
 from .models import User, PasswordResetToken, EmailVerificationToken
 from .serialzers import RegisterSerializer, UserSerializer, LoginSerializer
 from .email_service import EmailService
 from .utils import generate_password_reset_token, generate_email_verification_token
+from conf.system_monitor import SystemMonitor
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -135,3 +138,59 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
         except PasswordResetToken.DoesNotExist:
             return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SystemViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats(self, request):
+        from conf.system_monitor import get_system_stats
+        from django.test import RequestFactory
+        return get_system_stats(request._request)
+
+    @action(detail=False, methods=['get'], url_path='alerts')
+    def alerts(self, request):
+        from conf.system_monitor import get_system_alerts
+        return get_system_alerts(request._request)
+
+    @action(detail=False, methods=['get', 'post'], url_path='jwt-session')
+    def jwt_session(self, request):
+        from conf.jwt_session import jwt_session_config
+        return jwt_session_config(request._request)
+
+    @action(detail=False, methods=['post'], url_path='token/check-expiry')
+    def check_token_expiry(self, request):
+        from conf.jwt_session import check_token_expiry
+        return check_token_expiry(request._request)
+
+
+class MicrosoftAuthViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['get'], url_path='login')
+    def login(self, request):
+        from .microsoft_auth import microsoft_login
+        return microsoft_login(request._request)
+
+    @action(detail=False, methods=['get'], url_path='callback')
+    def callback(self, request):
+        from .microsoft_auth import microsoft_callback
+        return microsoft_callback(request._request)
+
+    @action(detail=False, methods=['get'], url_path='test')
+    def test(self, request):
+        from .microsoft_auth import microsoft_config_test
+        return microsoft_config_test(request._request)
+
+
+class TokenViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['post'], url_path='refresh')
+    def refresh(self, request):
+        return TokenRefreshView.as_view()(request._request)
+
+    @action(detail=False, methods=['post'], url_path='verify')
+    def verify(self, request):
+        return TokenVerifyView.as_view()(request._request)

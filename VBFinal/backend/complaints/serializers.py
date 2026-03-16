@@ -55,7 +55,7 @@ class CategoryResolverSerializer(serializers.ModelSerializer):
 class ComplaintCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
-        fields = ["title", "description", "institution", "attachment", "priority"]
+        fields = ["title", "description", "institution", "category", "attachment", "priority"]
 
 
 class ComplaintAttachmentSerializer(serializers.ModelSerializer):

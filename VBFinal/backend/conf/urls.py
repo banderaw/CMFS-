@@ -22,23 +22,25 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from accounts.urls import router as accounts_router
 from complaints.urls import router as complaints_router
+from feedback.urls import router as feedback_router
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
 router.registry.extend(accounts_router.registry)
 router.registry.extend(complaints_router.registry)
+router.registry.extend(feedback_router.registry)
 
 
 
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="Complaint Management API",
+        title="Complaint Management and Feedback TRacking  API",
         default_version='v1',
-        description="API documentation for Gondar University Complaint Management System",
-        terms_of_service="https://www.gondar.edu.et/terms/",
-        contact=openapi.Contact(email="support@gondar.edu.et"),
-        license=openapi.License(name="BSD License"),
+        description="API documentation CMFS",
+        terms_of_service="https://www.gondar.edu.et/",
+        contact=openapi.Contact(email="cmfs@gondar.edu.et"),
+        license=openapi.License(name="License"),
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
@@ -47,9 +49,6 @@ schema_view = get_schema_view(
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-    path('api/', include('accounts.urls')),
-    path('api/', include('complaints.urls')),
-    path('api/feedback/', include('feedback.urls')),
     path('api-auth/', include('rest_framework.urls')),
     path('auth/', include('social_django.urls', namespace='social')),
 

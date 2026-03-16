@@ -21,7 +21,7 @@ from .serializers import (
     AISettingsConfigSerializer,
     AIPriorityKeywordSerializer,
 )
-from .ai_service import ai_service
+from .service import service
 
 
 class InstitutionViewSet(viewsets.ModelViewSet):
@@ -115,10 +115,9 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         complaint = serializer.save(submitted_by=submitted_by)
         
         try:
-            ai_service.process_complaint(complaint)
+            service.process_complaint(complaint)
             complaint.refresh_from_db()
-        except Exception as e:
-            # Continue even if AI processing fails
+        except Exception:
             pass
             
         output_serializer = ComplaintSerializer(complaint)
@@ -295,7 +294,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             "totalProcessed": total_processed,
             "resolvedComplaints": resolved_count,
             "avgResolutionDays": avg_resolution_days,
-            "modelStatus": "loaded" if ai_service.model else "unavailable",
+            "modelStatus": "disabled",
             "lastTrained": config.last_trained.isoformat() if config.last_trained else None,
         }
 
@@ -330,7 +329,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
     def ai_categorize(self, request, pk=None):
         """Manually trigger AI categorization"""
         complaint = self.get_object()
-        result = ai_service.process_complaint(complaint)
+        result = service.process_complaint(complaint)
         
         if result:
             return DRFResponse({
