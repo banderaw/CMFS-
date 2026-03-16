@@ -13,7 +13,8 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
   const [complaintForm, setComplaintForm] = useState({
     title: '',
     description: '',
-    institution: ''
+    institution: '',
+    category: ''
   });
   const [files, setFiles] = useState([]);
   const [formErrors, setFormErrors] = useState({});
@@ -36,6 +37,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
     if (!complaintForm.title.trim()) errors.title = t('required');
     if (!complaintForm.description.trim()) errors.description = t('required');
     if (!complaintForm.institution) errors.institution = t('required');
+    if (!complaintForm.category) errors.category = t('required');
     if (complaintForm.description.length > 500) {
       errors.description = language === 'am' ? 'መግለጫው ከ500 ቁምፊዎች በታች መሆን አለበት' : 'Description must be under 500 characters';
     }
@@ -76,6 +78,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       formData.append('title', complaintForm.title);
       formData.append('description', complaintForm.description);
       formData.append('institution', complaintForm.institution);
+      formData.append('category', complaintForm.category);
       formData.append('priority', 'medium');
 
       // Add files to form data
@@ -86,7 +89,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       const response = await apiService.createComplaint(formData);
 
       if (response) {
-        setComplaintForm({ title: '', description: '', institution: '' });
+        setComplaintForm({ title: '', description: '', institution: '', category: '' });
         setFiles([]);
         setFormErrors({});
         setSubmitSuccess(true);
@@ -186,6 +189,25 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
               {formErrors.institution && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.institution}</p>}
             </div>
 
+            <div>
+              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                {language === 'am' ? 'ምድብ' : 'Category'} *
+              </label>
+              <select
+                value={complaintForm.category}
+                onChange={(e) => setComplaintForm({ ...complaintForm, category: e.target.value })}
+                className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} ${formErrors.category ? 'border-red-500' : ''}`}
+              >
+                <option value="">{language === 'am' ? 'ምድብ ይምረጡ' : 'Select category'}</option>
+                {categories.map((cat) => (
+                  <option key={cat.category_id} value={cat.category_id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              {formErrors.category && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.category}</p>}
+            </div>
+
             {/* File Upload */}
             <div>
               <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
@@ -250,7 +272,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
               <button
                 type="button"
                 onClick={() => {
-                  setComplaintForm({ title: '', description: '', institution: '' });
+                  setComplaintForm({ title: '', description: '', institution: '', category: '' });
                   setFiles([]);
                   setFormErrors({});
                 }}

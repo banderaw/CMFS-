@@ -113,7 +113,6 @@ const SystemManagement = () => {
         setRealTimeStats(newStats);
         
         // Update system stats with real backend data
-        console.log('Backend response:', response);
         setSystemStats(prev => ({
           ...prev,
           uptime: systemData.uptime_hours ? `${Math.floor(systemData.uptime_hours / 24)} days, ${Math.floor(systemData.uptime_hours % 24)} hours` : prev.uptime,
