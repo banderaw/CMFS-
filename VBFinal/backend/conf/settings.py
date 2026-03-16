@@ -1,34 +1,22 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-
-# Load environment variables from .env file
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
-
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-$u)x4_iy3uske_fppoj!x(dl3vff03!(k+%bv_=v=24tv0l!ug')
-
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+SECRET_KEY = os.getenv('SECRET_KEY')
+DEBUG = os.getenv('DEBUG') == 'True'
 
 ALLOWED_HOSTS = [
     "*", 
-    "verbose-fiesta-r4p5rqw5jgw6fgx4-8000.app.github.dev",
     "localhost",
     "127.0.0.1",    
      ]
-
 CSRF_TRUSTED_ORIGINS = [
-    "https://verbose-fiesta-r4p5rqw5jgw6fgx4-8000.app.github.dev",
     "https://localhost:8000",
     "https://127.0.0.1:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5173",
-    
-
 ]
-
-
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -36,12 +24,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-
     "accounts.apps.AccountsConfig",
     "complaints",
     "feedback",
-
     "rest_framework",
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
@@ -67,14 +52,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173", 
     "https://localhost:5173",
     "https://127.0.0.1:5173",
-    "https://verbose-fiesta-r4p5rqw5jgw6fgx4-8000.app.github.dev",
 ]
 
-# For development, allow all origins
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-
-# Additional CORS headers for API requests
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -86,8 +67,6 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-
-# Allow all HTTP methods
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -96,25 +75,15 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
-
-# Expose headers to frontend
 CORS_EXPOSE_HEADERS = [
     'content-type',
     'x-csrftoken',
 ]
-
-# Allow preflight requests
 CORS_PREFLIGHT_MAX_AGE = 86400
-
-
 SWAGGER_SETTINGS = {
-    # "DEFAULT_API_URL": "https://verbose-fiesta-r4p5rqw5jgw6fgx4-8000.app.github.dev",
     "DEFAULT_API_URL":"http://127.0.0.1:8000",
 }
-
-
 ROOT_URLCONF = 'conf.urls'
-
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -133,17 +102,12 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'conf.wsgi.application'
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
-
-# Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -159,34 +123,17 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-
-
-# Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
-
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.EmailOrUsernameModelBackend',  
     'django.contrib.auth.backends.ModelBackend', 
 ]
-
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -194,13 +141,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
         'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
-         
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
 }
-
-# Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
@@ -209,16 +153,11 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 
-# For development: console backend
 if DEBUG and not EMAIL_HOST_USER:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# JWT Configuration
 from datetime import timedelta
-
-# JWT Session timeout settings (configurable)
-JWT_SESSION_TIMEOUT_MINUTES = 30  # Default 30 minutes, can be changed via admin
-
+JWT_SESSION_TIMEOUT_MINUTES = 60  
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=JWT_SESSION_TIMEOUT_MINUTES),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -235,8 +174,6 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
-
-# Microsoft OAuth Settings
 SOCIAL_AUTH_AZUREAD_OAUTH2_KEY = os.getenv('MICROSOFT_CLIENT_ID', '')
 SOCIAL_AUTH_AZUREAD_OAUTH2_SECRET = os.getenv('MICROSOFT_CLIENT_SECRET', '')
 SOCIAL_AUTH_AZUREAD_OAUTH2_TENANT_ID = os.getenv('MICROSOFT_TENANT_ID', 'common')

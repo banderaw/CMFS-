@@ -58,3 +58,4 @@ Thumbs.db
 *.safetensors
 models/
 sentence_transformers_cache/
+vworld/
