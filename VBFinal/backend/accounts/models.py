@@ -122,7 +122,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     phone_regex = RegexValidator(
         regex=r'^\+?1?\d{9,10}$',
-        message="Phone number must be entered in the format: '+999999999'. Up to 10 digits allowed."
+        message="Phone number must be entered in the format: '+0918121314'. Up to 10 digits allowed."
     )
 
     email = models.EmailField(unique=True, db_index=True)
