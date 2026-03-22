@@ -5,8 +5,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
-from .models import User, PasswordResetToken, EmailVerificationToken
-from .serialzers import RegisterSerializer, UserSerializer, LoginSerializer
+from .models import User, PasswordResetToken, EmailVerificationToken, Campus, College, Department
+from .serialzers import RegisterSerializer, UserSerializer, LoginSerializer, CampusSerializer, CollegeSerializer, DepartmentSerializer
 from .email_service import EmailService
 from .utils import generate_password_reset_token, generate_email_verification_token
 from conf.system_monitor import SystemMonitor
@@ -194,3 +194,33 @@ class TokenViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='verify')
     def verify(self, request):
         return TokenVerifyView.as_view()(request._request)
+
+
+class CampusViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Campus.objects.all()
+    serializer_class = CampusSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class CollegeViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CollegeSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        campus_id = self.request.query_params.get('campus')
+        qs = College.objects.all()
+        if campus_id:
+            qs = qs.filter(college_campus_id=campus_id)
+        return qs
+
+
+class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = DepartmentSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        college_id = self.request.query_params.get('college')
+        qs = Department.objects.all()
+        if college_id:
+            qs = qs.filter(department_college_id=college_id)
+        return qs

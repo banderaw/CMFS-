@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = os.getenv('SECRET_KEY')
-DEBUG = os.getenv('DEBUG') == 'True'
+# SECRET_KEY = "django-insecure-$u)x4_iy3uske_fppoj!x(dl3vff03!(k+%bv_=v=24tv0l!ug"
+# DEBUG = os.getenv('DEBUG') == 'True'
+DEBUG = True
 
 ALLOWED_HOSTS = [
     "*", 

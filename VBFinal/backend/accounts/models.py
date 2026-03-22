@@ -79,6 +79,28 @@ class UserManager(BaseUserManager):
 
         return self.create_user(email, password, **extra_fields)
 
+class Campus(models.Model):
+    campus_name = models.CharField(max_length = 100, blank = True, null =True)
+
+class College(models.Model):
+    college_name = models.CharField(max_length=100,null=True,blank=True)
+    college_campus = models.ForeignKey(
+        Campus,
+        on_delete = models.CASCADE,
+        null = True,
+        blank = True
+    )
+
+class Department(models.Model):
+    department_name = models.CharField(max_length=100,null=True, blank=True)
+    department_college = models.ForeignKey(
+        College,
+        on_delete = models.CASCADE,
+        null = True,
+        blank = True,
+        related_name = "departments"
+    )
+
 
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_USER = 'user'  # Complainter
@@ -96,19 +118,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         ROLE_OFFICER: 2,
         ROLE_ADMIN: 3,
     }
-    COLLEGE_CHOICES = [
-        ('CMHS', 'College of Medicine and Health Sciences'),
-        ('CNCS', 'College of Natural and Computational Sciences'),
-        ('CBE', 'College of Business and Economics'),
-        ('CSSH', 'College of Social Sciences and Humanities'),
-        ('CVMAS', 'College of Veterinary Medicine and Animal Sciences'),
-        ('CAES', 'College of Agriculture and Environmental Sciences'),
-        ('COI', 'College of Informatics'),
-        ('COE', 'College of Education'),
-        ('IOT', 'Institute of Technology'),
-        ('IOB', 'Institute of Biotechnology'),
-        ('SOL', 'School of Law'),
-    ]
+   
     
     phone_regex = RegexValidator(
         regex=r'^\+?1?\d{9,10}$',
@@ -121,11 +131,24 @@ class User(AbstractBaseUser, PermissionsMixin):
      
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
-    college = models.CharField(
-        max_length=100,
-        choices=COLLEGE_CHOICES,
-        null=True,
-        blank=True,
+    user_campus = models.ForeignKey(
+        Campus,
+        on_delete = models.CASCADE,
+        blank = True,
+        null = True
+    )
+    college = models.ForeignKey(
+        College,
+        on_delete=models.CASCADE,
+        null = True,
+        blank = True
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete = models.CASCADE,
+        null = True,
+        blank = True,
+        related_name = "department"
     )
     phone = models.CharField(
         validators=[phone_regex],

@@ -1,6 +1,24 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User
+from .models import User, Campus, College, Department
+
+
+class CampusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Campus
+        fields = ["id", "campus_name"]
+
+
+class CollegeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = College
+        fields = ["id", "college_name", "college_campus"]
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ["id", "department_name", "department_college"]
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -9,7 +27,12 @@ class UserSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ["id", "email", "username", "first_name", "last_name", "college", "phone", "role", "campus_id", "is_active", "is_email_verified", "password", "confirm_password", "auth_provider"]
+        fields = [
+            "id", "email", "username", "first_name", "last_name",
+            "user_campus", "college", "department",
+            "phone", "role", "campus_id",
+            "is_active", "is_email_verified", "password", "confirm_password", "auth_provider"
+        ]
         extra_kwargs = {
             "is_email_verified": {"read_only": True},
             "id": {"read_only": True},
@@ -80,7 +103,10 @@ class RegisterSerializer(serializers.ModelSerializer):
             "username",
             "first_name",
             "last_name",
+            "user_campus",
             "college",
+            "department",
+            "campus_id",
             "phone",
             "password",
             "confirm_password",

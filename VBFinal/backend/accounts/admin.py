@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import User, EmailLog, PasswordResetToken, EmailVerificationToken
+from .models import User, EmailLog, PasswordResetToken, EmailVerificationToken , Campus, College, Department
+admin.site.register(Campus)
+admin.site.register(College)
+admin.site.register(Department)
 
 
 @admin.register(User)
