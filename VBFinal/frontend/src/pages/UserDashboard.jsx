@@ -10,6 +10,7 @@ import Notifications from '../components/User/Notifications';
 import UserProfile from '../components/User/UserProfile';
 import MaintenanceNotification from '../components/UI/MaintenanceNotification';
 import UserFeedback from '../components/User/UserFeedback';
+import Appointments from '../components/User/Appointments';
 import LanguageToggle from '../components/UI/LanguageToggle';
 
 const UserDashboard = () => {
@@ -137,21 +138,33 @@ const UserDashboard = () => {
         return <SubmitComplaint institutions={institutions} setSubmitSuccess={setSubmitSuccess} />;
       case 'my-complaints':
         return (
-          <MyComplaints 
-            getStatusBadge={getStatusBadge}
-            getPriorityBadge={getPriorityBadge}
-          />
+          <div className="max-w-4xl mx-auto">
+            <MyComplaints 
+              getStatusBadge={getStatusBadge}
+              getPriorityBadge={getPriorityBadge}
+            />
+          </div>
         );
       case 'feedback':
-        return <UserFeedback />;
+        return (
+          <div className="max-w-4xl mx-auto">
+            <UserFeedback />
+          </div>
+        );
       case 'notifications':
         return (
-          <Notifications 
-            setUnreadCount={setUnreadCount}
-          />
+          <div className="max-w-4xl mx-auto">
+            <Notifications setUnreadCount={setUnreadCount} />
+          </div>
         );
       case 'profile':
         return <UserProfile />;
+      case 'appointments':
+        return (
+          <div className="max-w-4xl mx-auto">
+            <Appointments />
+          </div>
+        );
       default:
         return <SubmitComplaint institutions={institutions} setSubmitSuccess={setSubmitSuccess} />;
     }
@@ -160,6 +173,7 @@ const UserDashboard = () => {
   const menuItems = [
     { id: 'submit', icon: '📝', label: t('submit_complaint') },
     { id: 'my-complaints', icon: '📋', label: t('my_complaints') },
+    { id: 'appointments', icon: '📅', label: 'Appointments' },
     { id: 'notifications', icon: '🔔', label: t('notifications'), badge: unreadCount },
     { id: 'feedback', icon: '💬', label: t('feedback') },
     { id: 'profile', icon: '👤', label: t('profile') }
@@ -254,6 +268,21 @@ const UserDashboard = () => {
             </div>
           </div>
         </header>
+
+        {/* Breadcrumb nav */}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 lg:px-8">
+          <nav className="flex items-center space-x-1 h-9 text-sm">
+            <button onClick={() => navigate('/')} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+              Home
+            </button>
+            <span className="text-gray-400 dark:text-gray-500">/</span>
+            <span className="text-gray-500 dark:text-gray-400">Student Portal</span>
+            <span className="text-gray-400 dark:text-gray-500">/</span>
+            <span className="text-gray-900 dark:text-white font-medium">
+              {menuItems.find(m => m.id === activeTab)?.label}
+            </span>
+          </nav>
+        </div>
 
         <div className="flex">
           {/* Sidebar */}

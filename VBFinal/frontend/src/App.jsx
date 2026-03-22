@@ -14,7 +14,7 @@ import AuthSuccess from './pages/AuthSuccess';
 import AdminDashboard from './pages/AdminDashboard';
 import OfficerDashboard from './pages/OfficerDashboard';
 import UserDashboard from './pages/UserDashboard';
-import EndpointTester from './components/EndpointTester';
+
 
 // Component to handle root redirect based on auth status
 const RootRedirect = () => {
@@ -79,9 +79,6 @@ const AppContent = () => {
           </ProtectedRoute>
         }
       />
-
-      {/* Development Route */}
-      <Route path="/test" element={<EndpointTester />} />
 
       {/* Default Route */}
       <Route path="/" element={<RootRedirect />} />

@@ -18,6 +18,8 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
   });
   const [files, setFiles] = useState([]);
   const [formErrors, setFormErrors] = useState({});
+  const [ccEmails, setCcEmails] = useState([]);
+  const [ccInput, setCcInput] = useState('');
 
   useEffect(() => {
     loadCategories();
@@ -68,6 +70,25 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const addCcEmail = (raw) => {
+    const email = raw.trim().toLowerCase();
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (valid && !ccEmails.includes(email)) setCcEmails(prev => [...prev, email]);
+    setCcInput('');
+  };
+
+  const handleCcKeyDown = (e) => {
+    if (['Enter', ',', ' '].includes(e.key)) {
+      e.preventDefault();
+      if (ccInput.trim()) addCcEmail(ccInput);
+    }
+    if (e.key === 'Backspace' && !ccInput && ccEmails.length) {
+      setCcEmails(prev => prev.slice(0, -1));
+    }
+  };
+
+  const removeCc = (email) => setCcEmails(prev => prev.filter(e => e !== email));
+
   const submitComplaint = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -81,6 +102,11 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       formData.append('category', complaintForm.category);
       formData.append('priority', 'medium');
 
+      // CC emails as JSON
+      if (ccEmails.length > 0) {
+        formData.append('cc_emails', JSON.stringify(ccEmails));
+      }
+
       // Add files to form data
       files.forEach((file, index) => {
         formData.append(`attachment_${index}`, file);
@@ -91,6 +117,8 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       if (response) {
         setComplaintForm({ title: '', description: '', institution: '', category: '' });
         setFiles([]);
+        setCcEmails([]);
+        setCcInput('');
         setFormErrors({});
         setSubmitSuccess(true);
 
@@ -208,6 +236,33 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
               {formErrors.category && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.category}</p>}
             </div>
 
+            {/* CC */}
+            <div>
+              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                {language === 'am' ? 'ካርቦን ኮፒ (CC) — ኢሜይሎች' : 'Carbon Copy (CC) — Notify others'}
+              </label>
+              <div className={`flex flex-wrap gap-2 min-h-[44px] w-full border rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
+                {ccEmails.map(email => (
+                  <span key={email} className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-medium px-2 py-1 rounded-full">
+                    {email}
+                    <button type="button" onClick={() => removeCc(email)} className="hover:text-red-500 leading-none">✕</button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  value={ccInput}
+                  onChange={e => setCcInput(e.target.value)}
+                  onKeyDown={handleCcKeyDown}
+                  onBlur={() => ccInput.trim() && addCcEmail(ccInput)}
+                  placeholder={ccEmails.length === 0 ? (language === 'am' ? 'ኢሜይል ያስገቡ፣ Enter ይጫኑ' : 'Type email, press Enter or comma') : ''}
+                  className={`flex-1 min-w-[180px] bg-transparent text-sm outline-none ${isDark ? 'text-white placeholder-gray-400' : 'text-gray-900 placeholder-gray-400'}`}
+                />
+              </div>
+              <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                {language === 'am' ? 'ቅሬታው ሲቀርብ ለእነዚህ ሰዎች ማሳወቂያ ይላካል' : 'These people will be notified when the complaint is submitted'}
+              </p>
+            </div>
+
             {/* File Upload */}
             <div>
               <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
@@ -274,6 +329,8 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
                 onClick={() => {
                   setComplaintForm({ title: '', description: '', institution: '', category: '' });
                   setFiles([]);
+                  setCcEmails([]);
+                  setCcInput('');
                   setFormErrors({});
                 }}
                 className={`px-6 py-3 rounded-lg font-medium transition-colors ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
