@@ -108,12 +108,15 @@ WSGI_APPLICATION = 'conf.wsgi.application'
 
 DATABASE_URL = os.getenv('DATABASE_URL')
 if not DATABASE_URL:
-    raise ValueError('DATABASE_URL environment variable is required.')
+    raise ValueError(
+        'DATABASE_URL environment variable is required. Set it in your deployment environment (Render -> Service -> Environment).'
+    )
 
 DATABASES = {
     'default': dj_database_url.parse(
         DATABASE_URL,
         conn_max_age=600,
+        ssl_require=True,
     )
 }
 
