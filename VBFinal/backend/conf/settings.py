@@ -2,15 +2,11 @@ from pathlib import Path
 import os
 import dj_database_url
 from dotenv import load_dotenv
-
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG')
-
 ALLOWED_HOSTS = [
-    "*", 
     "localhost",
     "127.0.0.1",    
     "cmfs.onrender.com",
@@ -18,7 +14,6 @@ ALLOWED_HOSTS = [
      ]
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
-    "http://localhost:5173",
     "https://cmfs.onrender.com",
     "https://cmfs.vercel.app",
 ]
@@ -50,13 +45,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-
-
 CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173", 
     "https://cmfs.vercel.app",
 ]
-
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
@@ -105,11 +97,10 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'conf.wsgi.application'
-
 DATABASE_URL = os.getenv('DATABASE_URL')
 if not DATABASE_URL:
     raise ValueError(
-        'DATABASE_URL environment variable is required. Set it in your deployment environment (Render -> Service -> Environment).'
+        'DATABASE_URL environment variable is required.'
     )
 
 DATABASES = {
@@ -119,8 +110,6 @@ DATABASES = {
         ssl_require=True,
     )
 }
-
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -189,7 +178,6 @@ SIMPLE_JWT = {
 SOCIAL_AUTH_AZUREAD_OAUTH2_KEY = os.getenv('MICROSOFT_CLIENT_ID', '')
 SOCIAL_AUTH_AZUREAD_OAUTH2_SECRET = os.getenv('MICROSOFT_CLIENT_SECRET', '')
 SOCIAL_AUTH_AZUREAD_OAUTH2_TENANT_ID = os.getenv('MICROSOFT_TENANT_ID', 'common')
-
 AUTHENTICATION_BACKENDS = (
     'social_core.backends.azuread.AzureADOAuth2',
     'django.contrib.auth.backends.ModelBackend',
@@ -207,7 +195,6 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.user.user_details',
     'accounts.pipeline.generate_jwt_token',
 )
-
 SOCIAL_AUTH_URL_NAMESPACE = os.getenv('SOCIAL_AUTH_URL_NAMESPACE')
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = os.getenv('SOCIAL_AUTH_LOGIN_REDIRECT_URL')
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = os.getenv('SOCIAL_AUTH_NEW_USER_REDIRECT_URL')
