@@ -1,7 +1,8 @@
 from pathlib import Path
 import os
-from dotenv import load_dotenv
 import dj_database_url
+from dotenv import load_dotenv
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
@@ -104,12 +105,18 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'conf.wsgi.application'
+
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise ValueError('DATABASE_URL environment variable is required.')
+
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL'),
-        conn_max_age=600
+    'default': dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=600,
     )
 }
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
