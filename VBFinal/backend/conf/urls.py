@@ -23,12 +23,14 @@ from drf_yasg import openapi
 from accounts.urls import router as accounts_router
 from complaints.urls import router as complaints_router
 from feedback.urls import router as feedback_router
+from contact.urls import router as contact_router
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()
 router.registry.extend(accounts_router.registry)
 router.registry.extend(complaints_router.registry)
 router.registry.extend(feedback_router.registry)
+router.registry.extend(contact_router.registry)
 
 
 

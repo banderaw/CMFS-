@@ -101,7 +101,6 @@ class EscalationService:
 Complaint ID: {complaint.complaint_id}
 Title: {complaint.title}
 Status: {complaint.get_status_display()}
-Priority: {complaint.get_priority_display()}
 
 This complaint has reached the maximum escalation level and requires administrative intervention.
             """
@@ -183,12 +182,6 @@ This complaint has reached the maximum escalation level and requires administrat
         return {
             'total_escalated': escalated_complaints.count(),
             'pending_escalation': pending_escalation.count(),
-            'escalated_by_priority': {
-                'urgent': escalated_complaints.filter(priority='urgent').count(),
-                'high': escalated_complaints.filter(priority='high').count(),
-                'medium': escalated_complaints.filter(priority='medium').count(),
-                'low': escalated_complaints.filter(priority='low').count(),
-            }
         }
     
     @staticmethod

@@ -11,6 +11,31 @@ from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
 
 
+class SystemLog(models.Model):
+    LEVEL_CHOICES = [
+        ('INFO', 'Info'),
+        ('WARN', 'Warning'),
+        ('ERROR', 'Error'),
+        ('SUCCESS', 'Success'),
+    ]
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='INFO')
+    message = models.TextField()
+    category = models.CharField(max_length=50, default='SYSTEM')
+    user = models.CharField(max_length=255, blank=True, null=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    method = models.CharField(max_length=10, blank=True, null=True)
+    path = models.CharField(max_length=500, blank=True, null=True)
+    status_code = models.IntegerField(blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['level', 'created_at'])]
+
+    def __str__(self):
+        return f"[{self.level}] {self.category}: {self.message[:60]}"
+
+
 class EmailLog(models.Model):
     STATUS_CHOICES = [
         ('sent', 'Sent'),
@@ -80,26 +105,40 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 class Campus(models.Model):
-    campus_name = models.CharField(max_length = 100, blank = True, null =True)
+    campus_name = models.CharField(max_length=100, blank=True, null=True)
+    location    = models.CharField(max_length=255, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    is_active   = models.BooleanField(default=True)
+    created_at  = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.campus_name or ''
+
 
 class College(models.Model):
-    college_name = models.CharField(max_length=100,null=True,blank=True)
-    college_campus = models.ForeignKey(
-        Campus,
-        on_delete = models.CASCADE,
-        null = True,
-        blank = True
-    )
+    college_name   = models.CharField(max_length=100, null=True, blank=True)
+    college_code   = models.CharField(max_length=20, null=True, blank=True)
+    college_campus = models.ForeignKey(Campus, on_delete=models.CASCADE, null=True, blank=True, related_name='colleges')
+    dean           = models.CharField(max_length=150, blank=True, null=True)
+    description    = models.TextField(blank=True, null=True)
+    is_active      = models.BooleanField(default=True)
+    created_at     = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.college_name or ''
+
 
 class Department(models.Model):
-    department_name = models.CharField(max_length=100,null=True, blank=True)
-    department_college = models.ForeignKey(
-        College,
-        on_delete = models.CASCADE,
-        null = True,
-        blank = True,
-        related_name = "departments"
-    )
+    department_name    = models.CharField(max_length=100, null=True, blank=True)
+    department_code    = models.CharField(max_length=20, null=True, blank=True)
+    department_college = models.ForeignKey(College, on_delete=models.CASCADE, null=True, blank=True, related_name='departments')
+    head               = models.CharField(max_length=150, blank=True, null=True)
+    description        = models.TextField(blank=True, null=True)
+    is_active          = models.BooleanField(default=True)
+    created_at         = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.department_name or ''
 
 
 class User(AbstractBaseUser, PermissionsMixin):

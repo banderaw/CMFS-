@@ -54,7 +54,6 @@ class ComplaintService:
             assigned_officer = self.assign_to_first_level_officer(complaint)
             return {
                 'category': complaint.category,
-                'priority': complaint.priority,
                 'assigned_officer': assigned_officer,
             }
         except Exception as e:

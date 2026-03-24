@@ -114,13 +114,6 @@ class Complaint(models.Model):
         ("closed", "Closed"),
     ]
 
-    PRIORITY_CHOICES = [
-        ("low", "Low"),
-        ("medium", "Medium"),
-        ("high", "High"),
-        ("urgent", "Urgent"),
-    ]
-
     complaint_id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -160,11 +153,6 @@ class Complaint(models.Model):
         max_length=20,
         choices=STATUS_CHOICES,
         default="pending"
-    )
-    priority = models.CharField(
-        max_length=10,
-        choices=PRIORITY_CHOICES,
-        default="medium"
     )
 
     current_level = models.ForeignKey(
@@ -478,6 +466,31 @@ class Notification(models.Model):
             user=user,
             notification_type__in=escalation_types
         )
+
+
+class PublicAnnouncement(models.Model):
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='public_announcements'
+    )
+    is_active = models.BooleanField(default=True)
+    is_pinned = models.BooleanField(default=False)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-is_pinned', '-created_at']
+        indexes = [
+            models.Index(fields=['is_active', 'created_at']),
+            models.Index(fields=['expires_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({'active' if self.is_active else 'inactive'})"
 
 
 

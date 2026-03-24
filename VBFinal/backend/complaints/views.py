@@ -4,8 +4,9 @@ from rest_framework.response import Response as DRFResponse
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.db import models
 
-from .models import Institution, Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment
+from .models import Institution, Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment, PublicAnnouncement
 from .serializers import (
     InstitutionSerializer,
     CategorySerializer,
@@ -18,6 +19,7 @@ from .serializers import (
     AssignmentSerializer,
     ResponseSerializer,
     NotificationSerializer,
+    PublicAnnouncementSerializer,
     AppointmentSerializer,
 )
 from .service import service
@@ -409,6 +411,58 @@ class NotificationViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_200_OK)
 
 
+class PublicAnnouncementViewSet(viewsets.ModelViewSet):
+    serializer_class = PublicAnnouncementSerializer
+
+    def get_authenticators(self):
+        # Avoid 401 on public endpoints when stale/invalid Authorization headers are present.
+        if getattr(self, 'action', None) in ['list', 'retrieve']:
+            return []
+        return super().get_authenticators()
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = PublicAnnouncement.objects.select_related('created_by').all()
+        user = self.request.user
+
+        if self.action in ['list', 'retrieve']:
+            if user.is_authenticated and getattr(user, 'role', None) in ('officer', 'admin'):
+                if user.role == 'admin':
+                    return queryset
+                return queryset.filter(created_by=user)
+
+            now = timezone.now()
+            return queryset.filter(is_active=True).filter(
+                models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+            )
+
+        if not user.is_authenticated:
+            return PublicAnnouncement.objects.none()
+
+        if getattr(user, 'role', None) == 'admin':
+            return queryset
+
+        if getattr(user, 'role', None) == 'officer':
+            return queryset.filter(created_by=user)
+
+        return PublicAnnouncement.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        if getattr(request.user, 'role', None) not in ('officer', 'admin'):
+            return DRFResponse(
+                {'error': 'Only officers and admins can create announcements.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
 class AssignmentViewSet(viewsets.ModelViewSet):
     queryset = Assignment.objects.all()
     serializer_class = AssignmentSerializer
@@ -423,7 +477,22 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.role in ('officer', 'admin'):
             return Appointment.objects.all()
-        return Appointment.objects.filter(requested_by=user)
+
+        # Users can only view appointments scheduled by officers/admins
+        # for complaints they submitted.
+        return Appointment.objects.filter(
+            complaint__submitted_by=user,
+            requested_by__role__in=('officer', 'admin')
+        )
+
+    def create(self, request, *args, **kwargs):
+        # Prevent regular users from creating appointments.
+        if request.user.role not in ('officer', 'admin'):
+            return DRFResponse(
+                {'error': 'Only officers and admins can schedule appointments.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         complaint = serializer.validated_data['complaint']

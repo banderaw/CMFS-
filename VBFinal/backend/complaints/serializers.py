@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Institution, Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment
+from .models import PublicAnnouncement
 
 from django.contrib.auth import get_user_model
 
@@ -59,7 +60,7 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Complaint
-        fields = ["title", "description", "institution", "category", "attachment", "priority", "cc_emails"]
+        fields = ["title", "description", "institution", "category", "attachment", "cc_emails"]
 
     def create(self, validated_data):
         cc_emails = validated_data.pop('cc_emails', [])
@@ -109,7 +110,7 @@ class ComplaintSerializer(serializers.ModelSerializer):
         fields = [
             "complaint_id", "institution", "submitted_by", "category",
             "title", "description", "attachment", "attachments", "cc_list",
-            "created_at", "updated_at", "status", "priority",
+            "created_at", "updated_at", "status",
             "assigned_officer", "current_level", "escalation_deadline",
         ]
         read_only_fields = ["complaint_id", "created_at", "updated_at", "escalation_deadline"]
@@ -164,6 +165,22 @@ class NotificationSerializer(serializers.ModelSerializer):
             "read_at", "created_at"
         ]
         read_only_fields = ["id", "user", "created_at"]
+
+
+class PublicAnnouncementSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = PublicAnnouncement
+        fields = [
+            "id", "title", "message", "created_by", "created_by_name",
+            "is_active", "is_pinned", "expires_at", "created_at", "updated_at"
+        ]
+        read_only_fields = ["id", "created_by", "created_by_name", "created_at", "updated_at"]
+
+    def get_created_by_name(self, obj):
+        full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+        return full_name or obj.created_by.email
 
 
 

@@ -6,8 +6,8 @@ from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
-from .models import User, PasswordResetToken, EmailVerificationToken, Campus, College, Department
-from .serialzers import RegisterSerializer, UserSerializer, LoginSerializer, CampusSerializer, CollegeSerializer, DepartmentSerializer
+from .models import User, PasswordResetToken, EmailVerificationToken, Campus, College, Department, SystemLog
+from .serialzers import RegisterSerializer, UserSerializer, LoginSerializer, CampusSerializer, CollegeSerializer, DepartmentSerializer, SystemLogSerializer
 from .email_service import EmailService
 from .utils import generate_password_reset_token, generate_email_verification_token
 from conf.system_monitor import SystemMonitor
@@ -40,6 +40,25 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
         refresh = RefreshToken.for_user(user)
+
+        # Log the login session
+        try:
+            ip_address = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+            if ',' in ip_address:
+                ip_address = ip_address.split(',')[0].strip()
+            
+            SystemLog.objects.create(
+                level='SUCCESS',
+                message=f"User {user.email} logged in",
+                category='AUTH',
+                user=user.email,
+                ip_address=ip_address or None,
+                method='POST',
+                path='/api/accounts/login/',
+                status_code=200,
+            )
+        except Exception as e:
+            pass  # Don't break login if logging fails
 
         return Response({
             "refresh": str(refresh),
@@ -165,6 +184,81 @@ class SystemViewSet(viewsets.ViewSet):
         from conf.jwt_session import check_token_expiry
         return check_token_expiry(request._request)
 
+    @action(detail=False, methods=['get'], url_path='active-sessions', permission_classes=[permissions.IsAdminUser])
+    def active_sessions(self, request):
+        """Get list of active user sessions with IP addresses from recent log entries"""
+        try:
+            from django.db.models import Q, Max
+            from django.utils import timezone
+            
+            # Get sessions from last 24 hours (more reliable than 1 hour)
+            lookback_time = timezone.now() - timedelta(hours=24)
+            
+            # Get all auth-related logs (login, API calls from authenticated users)
+            recent_logs = SystemLog.objects.filter(
+                created_at__gte=lookback_time,
+                user__isnull=False,
+            ).exclude(
+                user=''
+            ).exclude(
+                ip_address__isnull=True
+            ).order_by('-created_at')
+            
+            # Group by user email and get latest activity per IP
+            user_sessions = {}
+            for log in recent_logs:
+                if log.user:
+                    # Create a unique key for each user-IP combination
+                    key = f"{log.user}_{log.ip_address}"
+                    if key not in user_sessions:
+                        # Get user object to fetch full info
+                        try:
+                            user_obj = User.objects.get(email=log.user)
+                            user_sessions[key] = {
+                                'id': user_obj.id,
+                                'email': user_obj.email,
+                                'first_name': user_obj.first_name or 'Unknown',
+                                'last_name': user_obj.last_name or 'User',
+                                'role': user_obj.role,
+                                'ip_address': log.ip_address,
+                                'last_activity': log.created_at.isoformat(),
+                                'method': log.method,
+                                'path': log.path,
+                                'status_code': log.status_code
+                            }
+                        except User.DoesNotExist:
+                            user_sessions[key] = {
+                                'email': log.user,
+                                'first_name': 'Unknown',
+                                'last_name': 'User',
+                                'role': 'user',
+                                'ip_address': log.ip_address,
+                                'last_activity': log.created_at.isoformat(),
+                                'method': log.method,
+                                'path': log.path,
+                                'status_code': log.status_code
+                            }
+            
+            # Sort by most recent activity
+            sessions = sorted(
+                list(user_sessions.values()),
+                key=lambda x: x['last_activity'],
+                reverse=True
+            )
+            
+            return Response({
+                'count': len(sessions),
+                'results': sessions
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'count': 0,
+                'results': [],
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class MicrosoftAuthViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
@@ -197,13 +291,13 @@ class TokenViewSet(viewsets.ViewSet):
         return TokenVerifyView.as_view()(request._request)
 
 
-class CampusViewSet(viewsets.ReadOnlyModelViewSet):
+class CampusViewSet(viewsets.ModelViewSet):
     queryset = Campus.objects.all()
     serializer_class = CampusSerializer
     permission_classes = [permissions.AllowAny]
 
 
-class CollegeViewSet(viewsets.ReadOnlyModelViewSet):
+class CollegeViewSet(viewsets.ModelViewSet):
     serializer_class = CollegeSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -215,7 +309,7 @@ class CollegeViewSet(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
+class DepartmentViewSet(viewsets.ModelViewSet):
     serializer_class = DepartmentSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -225,3 +319,27 @@ class DepartmentViewSet(viewsets.ReadOnlyModelViewSet):
         if college_id:
             qs = qs.filter(department_college_id=college_id)
         return qs
+
+
+class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = SystemLogSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        qs = SystemLog.objects.all()
+        level = self.request.query_params.get('level')
+        category = self.request.query_params.get('category')
+        limit = self.request.query_params.get('limit', 100)
+        if level:
+            qs = qs.filter(level=level.upper())
+        if category:
+            qs = qs.filter(category=category.upper())
+        return qs[:int(limit)]
+
+    from rest_framework.decorators import action
+    from rest_framework.response import Response as DRFResponse
+
+    @action(detail=False, methods=['delete'], url_path='clear', permission_classes=[permissions.IsAdminUser])
+    def clear(self, request):
+        SystemLog.objects.all().delete()
+        return Response({'message': 'Logs cleared.'})

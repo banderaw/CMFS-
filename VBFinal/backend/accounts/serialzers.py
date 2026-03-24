@@ -1,42 +1,65 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Campus, College, Department
+from .models import User, Campus, College, Department, SystemLog
+
+
+class SystemLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SystemLog
+        fields = ['id', 'level', 'message', 'category', 'user', 'ip_address',
+                  'method', 'path', 'status_code', 'created_at']
 
 
 class CampusSerializer(serializers.ModelSerializer):
     class Meta:
         model = Campus
-        fields = ["id", "campus_name"]
+        fields = ["id", "campus_name", "location", "description", "is_active", "created_at"]
+        read_only_fields = ["created_at"]
 
 
 class CollegeSerializer(serializers.ModelSerializer):
+    campus_name = serializers.CharField(source='college_campus.campus_name', read_only=True)
+
     class Meta:
         model = College
-        fields = ["id", "college_name", "college_campus"]
+        fields = ["id", "college_name", "college_code", "college_campus", "campus_name",
+                  "dean", "description", "is_active", "created_at"]
+        read_only_fields = ["campus_name", "created_at"]
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
+    college_name = serializers.CharField(source='department_college.college_name', read_only=True)
+
     class Meta:
         model = Department
-        fields = ["id", "department_name", "department_college"]
+        fields = ["id", "department_name", "department_code", "department_college", "college_name",
+                  "head", "description", "is_active", "created_at"]
+        read_only_fields = ["college_name", "created_at"]
 
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    user_campus_detail = CampusSerializer(source='user_campus', read_only=True)
+    college_detail = CollegeSerializer(source='college', read_only=True)
+    department_detail = DepartmentSerializer(source='department', read_only=True)
     
     class Meta:
         model = User
         fields = [
             "id", "email", "username", "first_name", "last_name",
             "user_campus", "college", "department",
+            "user_campus_detail", "college_detail", "department_detail",
             "phone", "role", "campus_id",
             "is_active", "is_email_verified", "password", "confirm_password", "auth_provider"
         ]
         extra_kwargs = {
             "is_email_verified": {"read_only": True},
             "id": {"read_only": True},
-            "auth_provider": {"read_only": True}
+            "auth_provider": {"read_only": True},
+            "user_campus_detail": {"read_only": True},
+            "college_detail": {"read_only": True},
+            "department_detail": {"read_only": True}
         }
     
     def validate(self, data):
