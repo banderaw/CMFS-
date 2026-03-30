@@ -11,10 +11,11 @@ import apiService from '../services/api';
 import OfficerSchedule from '../components/Officer/OfficerSchedule';
 import OfficerProfile from '../components/Officer/OfficerProfile';
 import PublicAnnouncementBoard from '../components/Officer/PublicAnnouncementBoard';
+import Modal from '../components/UI/Modal';
 
 const OfficerDashboard = () => {
   const { isDark, toggleTheme } = useTheme();
-  const { language, toggleLanguage, t } = useLanguage();
+  const { language, t } = useLanguage();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -25,6 +26,7 @@ const OfficerDashboard = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [complaints, setComplaints] = useState([]);
+  const [ccComplaints, setCcComplaints] = useState([]);
   const [complaintsLoading, setComplaintsLoading] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
@@ -61,12 +63,13 @@ const OfficerDashboard = () => {
     }
     if (activeTab === 'complaints') {
       fetchComplaints();
+      fetchCCComplaints();
     }
     if (activeTab === 'dashboard') {
       fetchDashboardStats();
       fetchTemplates();
     }
-  }, [activeTab]);
+  }, [activeTab, user?.id]);
 
   const fetchDashboardStats = async () => {
     try {
@@ -83,9 +86,9 @@ const OfficerDashboard = () => {
         const allComplaints = complaintsData.results || complaintsData;
         
         // Calculate stats
-        const assignedComplaints = allComplaints.filter(c => c.assigned_to?.id === user?.id).length;
-        const resolvedComplaints = allComplaints.filter(c => c.assigned_to?.id === user?.id && c.status === 'resolved').length;
-        const pendingComplaints = allComplaints.filter(c => c.assigned_to?.id === user?.id && c.status === 'pending').length;
+        const assignedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id).length;
+        const resolvedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'resolved').length;
+        const pendingComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'pending').length;
         
         setDashboardStats({
           assignedComplaints,
@@ -177,6 +180,30 @@ const OfficerDashboard = () => {
       setComplaints([]);
     } finally {
       setComplaintsLoading(false);
+    }
+  };
+
+  const fetchCCComplaints = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch('/api/complaints/cc/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCcComplaints(Array.isArray(data) ? data : data.results || []);
+      } else {
+        setCcComplaints([]);
+      }
+    } catch (error) {
+      console.error('Error fetching CC complaints:', error);
+      setCcComplaints([]);
     }
   };
 
@@ -296,11 +323,12 @@ const OfficerDashboard = () => {
     }
   };
 
-  const fetchResponses = async () => {
-    if (!selectedComplaint) return;
+  const fetchResponses = async (complaintId = null) => {
+    const targetComplaintId = complaintId || selectedComplaint?.complaint_id;
+    if (!targetComplaintId) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/complaints/${selectedComplaint.complaint_id}/responses/`, {
+      const response = await fetch(`/api/complaints/${targetComplaintId}/responses/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -312,11 +340,12 @@ const OfficerDashboard = () => {
     }
   };
 
-  const fetchComments = async () => {
-    if (!selectedComplaint) return;
+  const fetchComments = async (complaintId = null) => {
+    const targetComplaintId = complaintId || selectedComplaint?.complaint_id;
+    if (!targetComplaintId) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/complaints/${selectedComplaint.complaint_id}/comments/`, {
+      const response = await fetch(`/api/complaints/${targetComplaintId}/comments/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -460,6 +489,53 @@ const OfficerDashboard = () => {
     statusFilter === 'all' || template.status === statusFilter
   ).reverse() : [];
 
+  const getComplaintFiles = (complaint) => {
+    if (!complaint) return [];
+
+    const files = [];
+    const attachments = Array.isArray(complaint.attachments) ? complaint.attachments : [];
+
+    attachments.forEach((attachment, index) => {
+      const attachmentUrl = attachment?.download_url || attachment?.file;
+      if (!attachmentUrl) return;
+      files.push({
+        id: attachment.id || `attachment-${index}`,
+        url: attachmentUrl,
+        filename: attachment.filename || `Attachment ${index + 1}`,
+        file_size: attachment.file_size,
+        content_type: attachment.content_type || '',
+        uploaded_at: attachment.uploaded_at,
+      });
+    });
+
+    // Backward compatibility for old payloads that only have the single attachment field
+    if (complaint.attachment && !files.some((file) => file.url === complaint.attachment)) {
+      const fallbackName = complaint.attachment.split('/').pop() || 'Attachment';
+      files.push({
+        id: 'legacy-attachment',
+        url: complaint.attachment,
+        filename: fallbackName,
+        file_size: null,
+        content_type: '',
+        uploaded_at: complaint.created_at,
+      });
+    }
+
+    return files;
+  };
+
+  const getFileIcon = (contentType = '', filename = '') => {
+    const ext = filename.toLowerCase();
+    const type = contentType.toLowerCase();
+
+    if (type.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg)$/.test(ext)) return '🖼️';
+    if (type.includes('pdf') || ext.endsWith('.pdf')) return '📄';
+    if (type.includes('word') || type.includes('document') || /\.(doc|docx|txt)$/.test(ext)) return '📝';
+    if (type.includes('excel') || type.includes('sheet') || /\.(xls|xlsx|csv)$/.test(ext)) return '📊';
+    if (type.includes('presentation') || /\.(ppt|pptx)$/.test(ext)) return '📈';
+    return '📎';
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -494,14 +570,14 @@ const OfficerDashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-xl font-semibold mb-4">Recent Complaints</h3>
-                {complaints.filter(c => c.assigned_to?.id === user?.id).slice(0, 5).length > 0 ? (
+                {complaints.filter(c => c.assigned_officer?.id === user?.id).slice(0, 5).length > 0 ? (
                   <div className="space-y-3">
-                    {complaints.filter(c => c.assigned_to?.id === user?.id).slice(0, 5).map((complaint) => (
+                    {complaints.filter(c => c.assigned_officer?.id === user?.id).slice(0, 5).map((complaint) => (
                       <div key={complaint.complaint_id} className="p-3 border rounded-lg">
                         <div className="flex justify-between items-start">
                           <div>
                             <h4 className="font-medium text-sm">{complaint.title}</h4>
-                            <p className="text-xs text-gray-600">{complaint.category?.name}</p>
+                            <p className="text-xs text-gray-600">{complaint.category?.office_name || complaint.category?.name || 'Uncategorized'}</p>
                           </div>
                           <span className={`px-2 py-1 text-xs rounded ${
                             complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
@@ -631,23 +707,100 @@ const OfficerDashboard = () => {
                           <div className="flex justify-between items-center text-sm text-gray-500">
                             <div className="space-x-4">
                               <span>ID: {complaint.complaint_id.slice(0, 8)}...</span>
-                              <span>Category: {complaint.category?.name || 'Uncategorized'}</span>
+                              <span>Category: {complaint.category?.office_name || complaint.category?.name || 'Uncategorized'}</span>
                             </div>
                             <span>Created: {new Date(complaint.created_at).toLocaleDateString()}</span>
                           </div>
                           
-                          <div className="mt-3 flex flex-wrap gap-2">
+                          <div className="mt-3 flex flex-wrap gap-2 items-center">
+                            {getComplaintFiles(complaint).length > 0 && (
+                              <span className="px-3 py-1 rounded-full text-xs bg-green-100 text-green-800 flex items-center gap-1">
+                                📎 {getComplaintFiles(complaint).length} file{getComplaintFiles(complaint).length > 1 ? 's' : ''}
+                              </span>
+                            )}
                             <button 
                               onClick={() => {
                                 setSelectedComplaint(complaint);
                                 setNewStatus(complaint.status);
                                 setShowComplaintModal(true);
-                                fetchResponses();
-                                fetchComments();
+                                fetchResponses(complaint.complaint_id);
+                                fetchComments(complaint.complaint_id);
                               }}
                               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                             >
                               View & Manage
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* CC'd Complaints Section */}
+              {ccComplaints.length > 0 && (
+                <div className="mt-8 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className={`text-lg font-semibold text-purple-600 flex items-center gap-2`}>
+                      📋 CC'd Complaints ({ccComplaints.length})
+                    </h3>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {ccComplaints
+                      .filter(complaint => statusFilter === 'all' || complaint.status === statusFilter)
+                      .map(complaint => (
+                        <div 
+                          key={complaint.complaint_id} 
+                          className={`border-l-4 border-purple-500 rounded-lg p-4 ${isDark ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} transition-colors`}
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-purple-600 text-lg">🔗</span>
+                              <h4 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{complaint.title}</h4>
+                            </div>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              complaint.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                              complaint.status === 'escalated' ? 'bg-red-100 text-red-800' :
+                              complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {complaint.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-3`}>
+                            {complaint.description.length > 100 
+                              ? `${complaint.description.substring(0, 100)}...` 
+                              : complaint.description}
+                          </p>
+                          
+                          <div className={`flex justify-between items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="space-x-4">
+                              <span>ID: {complaint.complaint_id.slice(0, 8)}</span>
+                              <span>Category: {complaint.category?.office_name || 'Uncategorized'}</span>
+                            </div>
+                            <span>Created: {new Date(complaint.created_at).toLocaleDateString()}</span>
+                          </div>
+                          
+                          <div className="mt-3 flex flex-wrap gap-2 items-center">
+                            {getComplaintFiles(complaint).length > 0 && (
+                              <span className={`px-3 py-1 rounded-full text-xs flex items-center gap-1 ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'}`}>
+                                📎 {getComplaintFiles(complaint).length} file{getComplaintFiles(complaint).length > 1 ? 's' : ''}
+                              </span>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setSelectedComplaint(complaint);
+                                setNewStatus(complaint.status);
+                                setShowComplaintModal(true);
+                                fetchResponses(complaint.complaint_id);
+                                fetchComments(complaint.complaint_id);
+                              }}
+                              className={`px-4 py-2 rounded text-white font-medium ${isDark ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-500 hover:bg-purple-600'} transition-colors`}
+                            >
+                              View & Monitor
                             </button>
                           </div>
                         </div>
@@ -864,6 +1017,227 @@ const OfficerDashboard = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <MaintenanceNotification />
             {renderTabContent()}
+
+            <Modal
+              isOpen={showComplaintModal}
+              onClose={() => {
+                setShowComplaintModal(false);
+                setSelectedComplaint(null);
+                setResponses([]);
+                setComments([]);
+                setShowReassignModal(false);
+              }}
+              title={selectedComplaint ? `Manage Complaint: ${selectedComplaint.title}` : 'Manage Complaint'}
+              size="xl"
+            >
+              {selectedComplaint && (
+                <div className="space-y-5">
+                  <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{selectedComplaint.description}</p>
+                  </div>
+
+                  {/* CC Information */}
+                  {selectedComplaint.is_cc_user && (
+                    <div className={`p-3 rounded-lg border-l-4 border-blue-500 ${isDark ? 'bg-blue-900/30' : 'bg-blue-50'}`}>
+                      <p className={`text-sm font-medium ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                        ⭐ You are CC'd on this complaint
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedComplaint.cc_list && selectedComplaint.cc_list.length > 0 && (
+                    <div className={`p-4 rounded-lg border-l-4 border-purple-500 ${isDark ? 'bg-purple-900/20 border-purple-700' : 'bg-purple-50 border-purple-200'}`}>
+                      <h4 className={`font-semibold mb-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                        CC'd Officers ({selectedComplaint.cc_list.length})
+                      </h4>
+                      <div className="space-y-1">
+                        {selectedComplaint.cc_list.map((cc, index) => (
+                          <p key={index} className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            📧 {cc.email}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {getComplaintFiles(selectedComplaint).length > 0 && (
+                    <div className={`p-4 rounded-lg border-l-4 border-green-500 ${isDark ? 'bg-green-900/20 border-green-700' : 'bg-green-50 border-green-200'}`}>
+                      <h4 className={`font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-green-300' : 'text-green-700'}`}>
+                        📎 Attachments ({getComplaintFiles(selectedComplaint).length})
+                      </h4>
+                      <div className="space-y-2">
+                        {getComplaintFiles(selectedComplaint).map((file) => (
+                          <div
+                            key={file.id}
+                            className={`flex items-center justify-between p-3 rounded border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} hover:shadow-sm transition-shadow`}
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <span className="text-lg flex-shrink-0">{getFileIcon(file.content_type, file.filename)}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-medium truncate ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                  {file.filename}
+                                </p>
+                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                  {file.file_size ? `${(file.file_size / 1024).toFixed(1)} KB` : 'Unknown size'}
+                                  {' • '}
+                                  {new Date(file.uploaded_at || selectedComplaint.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <a
+                              href={file.url}
+                              download={file.filename}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`ml-2 flex-shrink-0 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                                isDark ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white'
+                              }`}
+                            >
+                              View
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Status</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={newStatus}
+                          onChange={(e) => setNewStatus(e.target.value)}
+                          className={`flex-1 px-3 py-2 border rounded-md ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="escalated">Escalated</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                        <button
+                          onClick={handleUpdateStatus}
+                          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Update
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Reassign</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            await fetchOfficers();
+                            setShowReassignModal((prev) => !prev);
+                          }}
+                          className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                        >
+                          {showReassignModal ? 'Cancel Reassign' : 'Reassign'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {showReassignModal && (
+                    <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <select
+                          value={reassignOfficerId}
+                          onChange={(e) => setReassignOfficerId(e.target.value)}
+                          className={`px-3 py-2 border rounded-md ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        >
+                          <option value="">Select officer</option>
+                          {officers
+                            .filter((officer) => officer.id !== user?.id)
+                            .map((officer) => (
+                              <option key={officer.id} value={officer.id}>
+                                {(officer.first_name || '') + ' ' + (officer.last_name || '')} ({officer.email})
+                              </option>
+                            ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={reassignReason}
+                          onChange={(e) => setReassignReason(e.target.value)}
+                          placeholder="Reason (optional)"
+                          className={`px-3 py-2 border rounded-md ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        />
+                      </div>
+                      <button
+                        onClick={handleReassign}
+                        className="mt-3 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                      >
+                        Confirm Reassign
+                      </button>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Add Response</label>
+                    <div className="flex gap-2">
+                      <textarea
+                        value={responseText}
+                        onChange={(e) => setResponseText(e.target.value)}
+                        rows={3}
+                        className={`flex-1 px-3 py-2 border rounded-md ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        placeholder="Write response to complainant..."
+                      />
+                      <button
+                        onClick={handleAddResponse}
+                        className="h-fit px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className={`font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Responses</h4>
+                      <div className={`max-h-56 overflow-y-auto border rounded-lg p-3 space-y-2 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                        {responses.length === 0 ? (
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No responses yet.</p>
+                        ) : responses.map((response) => (
+                          <div key={response.id} className={`p-2 rounded border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <p className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{response.message}</p>
+                            <div className="mt-2 flex justify-between items-center">
+                              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {new Date(response.created_at).toLocaleString()}
+                              </span>
+                              <button
+                                onClick={() => handleDeleteResponse(response.id)}
+                                className="text-xs text-red-600 hover:text-red-800"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className={`font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Comments</h4>
+                      <div className={`max-h-56 overflow-y-auto border rounded-lg p-3 space-y-2 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+                        {comments.length === 0 ? (
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No comments yet.</p>
+                        ) : comments.map((comment) => (
+                          <div key={comment.id} className={`p-2 rounded border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <p className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{comment.message}</p>
+                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                              {new Date(comment.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Modal>
           </div>
         </main>
       </div>

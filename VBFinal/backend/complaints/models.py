@@ -275,6 +275,7 @@ class ComplaintAttachment(models.Model):
         related_name="attachments"
     )
     file = models.FileField(upload_to="complaint_attachments/")
+    file_data = models.BinaryField(null=True, blank=True)
     filename = models.CharField(max_length=255)
     file_size = models.PositiveIntegerField()
     content_type = models.CharField(max_length=100)

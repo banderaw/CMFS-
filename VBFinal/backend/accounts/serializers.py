@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
+from django.db import IntegrityError
 
 from .models import Campus, College, Department, SystemLog, User
 
@@ -189,6 +190,19 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Gmail account must be a valid @gmail.com address.')
         return value.lower() if value else value
 
+    def validate_campus_id(self, value):
+        # Avoid unique constraint collisions from empty-string payloads.
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    def validate_username(self, value):
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     def validate(self, data):
         if data.get('password') != data.get('confirm_password'):
             raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
@@ -197,8 +211,19 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
-
-        user = User.objects.create(**validated_data)
-        user.set_password(password)
-        user.save()
-        return user
+        try:
+            user = User.objects.create(**validated_data)
+            user.set_password(password)
+            user.save()
+            return user
+        except IntegrityError as exc:
+            message = str(exc)
+            if 'accounts_user.campus_id' in message:
+                raise serializers.ValidationError({'campus_id': 'This campus ID is already in use.'})
+            if 'accounts_user.username' in message:
+                raise serializers.ValidationError({'username': 'This username is already in use.'})
+            if 'accounts_user.email' in message:
+                raise serializers.ValidationError({'email': 'This email is already in use.'})
+            if 'accounts_user.gmail_account' in message:
+                raise serializers.ValidationError({'gmail_account': 'This Gmail account is already in use.'})
+            raise serializers.ValidationError({'detail': 'Unable to create account with the provided data.'})

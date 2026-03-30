@@ -147,7 +147,7 @@ const UserDashboard = () => {
   const menuItems = [
     { id: 'submit', icon: '📝', name: t('submit_complaint') },
     { id: 'my-complaints', icon: '📋', name: t('my_complaints') },
-    { id: 'appointments', icon: '📅', name: 'Appointments' },
+    { id: 'appointments', icon: '📅', name: t('appointments') },
     { id: 'notifications', icon: '🔔', name: t('notifications'), badge: unreadCount },
     { id: 'feedback', icon: '💬', name: t('feedback') },
     { id: 'profile', icon: '👤', name: t('profile') }

@@ -100,6 +100,86 @@ class EmailService:
         )
 
     @staticmethod
+    def send_cc_complaint_notification(user, complaint):
+        """Send email when officer is CC'd on a complaint"""
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+        complaint_url = f"{frontend_url}/officer/dashboard?tab=complaints&complaint={complaint.complaint_id}"
+        
+        subject = f"[CC] New Complaint: {complaint.title}"
+        
+        category_name = complaint.category.office_name if complaint.category else 'Not assigned'
+        submitted_by = f"{complaint.submitted_by.first_name} {complaint.submitted_by.last_name}"
+        
+        html_message = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #3b82f6; color: white; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
+                .content {{ background-color: #f9fafb; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
+                .field {{ margin-bottom: 15px; }}
+                .label {{ font-weight: bold; color: #1f2937; }}
+                .value {{ color: #374151; margin-top: 5px; }}
+                .button {{ display: inline-block; background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-top: 20px; }}
+                .footer {{ text-align: center; color: #999; font-size: 12px; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>You've been CC'd on a complaint</h2>
+                </div>
+                
+                <div class="content">
+                    <div class="field">
+                        <div class="label">Complaint Title:</div>
+                        <div class="value">{complaint.title}</div>
+                    </div>
+                    
+                    <div class="field">
+                        <div class="label">Complaint ID:</div>
+                        <div class="value">{complaint.complaint_id}</div>
+                    </div>
+                    
+                    <div class="field">
+                        <div class="label">Submitted by:</div>
+                        <div class="value">{submitted_by}</div>
+                    </div>
+                    
+                    <div class="field">
+                        <div class="label">Category:</div>
+                        <div class="value">{category_name}</div>
+                    </div>
+                    
+                    <div class="field">
+                        <div class="label">Description:</div>
+                        <div class="value">{complaint.description[:300]}{"..." if len(complaint.description) > 300 else ""}</div>
+                    </div>
+                    
+                    <a href="{complaint_url}" class="button">View Complaint</a>
+                </div>
+                
+                <div class="footer">
+                    <p>This is a notification from the Complaint Management System</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        message = f"You've been CC'd on complaint '{complaint.title}'. Submitted by {submitted_by}. Visit the dashboard to view it."
+        
+        return EmailService.send_email(
+            subject=subject,
+            message=message,
+            recipient_list=[user.email],
+            email_type='cc_complaint',
+            recipient_user=user,
+            html_message=html_message
+        )
+
+    @staticmethod
     def send_escalation_alert(officer, complaint):
         subject = f"Complaint Escalated: {complaint.title}"
         message = f"Complaint ID {complaint.complaint_id} has been escalated to your level"

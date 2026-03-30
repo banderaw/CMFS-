@@ -7,8 +7,6 @@ import { MaintenanceProvider, useMaintenanceMode } from './contexts/MaintenanceC
 import ProtectedRoute from './components/ProtectedRoute';
 import TokenInterceptor from './components/TokenInterceptor';
 import MaintenancePage from './components/MaintenancePage';
-
-// Lazy-load heavy route components for code splitting
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const Login = lazy(() => import('./pages/Login'));
 const RegisterComplete = lazy(() => import('./pages/RegisterComplete'));
@@ -112,7 +110,7 @@ function App() {
           <AuthProvider>
             <TokenInterceptor>
               <Router>
-                <div className="App pt-20 pb-56">
+                <div className="App min-h-screen bg-inherit pt-20 pb-56">
                   <AppContent />
                 </div>
               </Router>

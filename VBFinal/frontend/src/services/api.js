@@ -148,6 +148,10 @@ class ApiService {
     return this.request('/complaints/');
   }
 
+  async getCCComplaints() {
+    return this.request('/complaints/cc/');
+  }
+
   async createComplaint(data) {
     const isFormData = data instanceof FormData;
     return this.request('/complaints/', {
@@ -509,7 +513,7 @@ class ApiService {
   // Users
 
   async createUser(data) {
-    return this.request('/accounts/register/', {
+    return this.request('/accounts/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -565,6 +569,18 @@ class ApiService {
     return this.request(`/announcements/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  }
+
+  async hidePublicAnnouncement(id) {
+    return this.request(`/announcements/${id}/hide/`, {
+      method: 'POST',
+    });
+  }
+
+  async showPublicAnnouncement(id) {
+    return this.request(`/announcements/${id}/show/`, {
+      method: 'POST',
     });
   }
 

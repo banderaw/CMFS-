@@ -13,9 +13,14 @@ const UserManagement = () => {
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
+    username: '',
     email: '',
+    gmail_account: '',
     phone: '',
+    campus_id: '',
+    user_campus: '',
     college: '',
+    department: '',
     role: 'user',
     is_active: true
   });
@@ -32,16 +37,40 @@ const UserManagement = () => {
   });
 
   const [colleges, setColleges] = useState([]);
+  const [campuses, setCampuses] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({
-    first_name: '', last_name: '', email: '', phone: '',
-    college: '', role: 'user', password: '', confirm_password: '', campus_id: ''
+    first_name: '',
+    last_name: '',
+    username: '',
+    email: '',
+    gmail_account: '',
+    phone: '',
+    campus_id: '',
+    user_campus: '',
+    college: '',
+    department: '',
+    role: 'user',
+    is_active: true,
+    password: '',
+    confirm_password: ''
   });
   const [addError, setAddError] = useState('');
 
   useEffect(() => {
     loadUsers();
-    apiService.getColleges().then(d => setColleges(d.results ?? d)).catch(() => {});
+    Promise.all([
+      apiService.getCampuses(),
+      apiService.getColleges(),
+      apiService.getDepartments(),
+    ])
+      .then(([campusesData, collegesData, departmentsData]) => {
+        setCampuses(campusesData.results ?? campusesData);
+        setColleges(collegesData.results ?? collegesData);
+        setDepartments(departmentsData.results ?? departmentsData);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -140,9 +169,14 @@ const UserManagement = () => {
     setFormData({
       first_name: user.first_name || '',
       last_name: user.last_name || '',
+      username: user.username || '',
       email: user.email || '',
+      gmail_account: user.gmail_account || '',
       phone: user.phone || '',
+      campus_id: user.campus_id || '',
+      user_campus: user.user_campus || '',
       college: user.college || '',
+      department: user.department || '',
       role: user.role || 'user',
       is_active: user.is_active
     });
@@ -152,10 +186,21 @@ const UserManagement = () => {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     try {
-      await apiService.updateUser(editingUser.id, formData);
+      const payload = {
+        ...formData,
+        username: formData.username || null,
+        gmail_account: formData.gmail_account || null,
+        phone: formData.phone || null,
+        campus_id: formData.campus_id || null,
+        user_campus: formData.user_campus || null,
+        college: formData.college || null,
+        department: formData.department || null,
+      };
+
+      await apiService.updateUser(editingUser.id, payload);
       setUsers(prev =>
         prev.map(user =>
-          user.id === editingUser.id ? { ...user, ...formData } : user
+          user.id === editingUser.id ? { ...user, ...payload } : user
         )
       );
       setShowEditModal(false);
@@ -175,14 +220,55 @@ const UserManagement = () => {
       return;
     }
     try {
-      await apiService.createUser(addForm);
+      const payload = {
+        ...addForm,
+        username: addForm.username || null,
+        gmail_account: addForm.gmail_account || null,
+        phone: addForm.phone || null,
+        campus_id: addForm.campus_id || null,
+        user_campus: addForm.user_campus || null,
+        college: addForm.college || null,
+        department: addForm.department || null,
+      };
+      await apiService.createUser(payload);
       setShowAddModal(false);
-      setAddForm({ first_name: '', last_name: '', email: '', phone: '', college: '', role: 'user', password: '', confirm_password: '', campus_id: '' });
+      setAddForm({
+        first_name: '',
+        last_name: '',
+        username: '',
+        email: '',
+        gmail_account: '',
+        phone: '',
+        campus_id: '',
+        user_campus: '',
+        college: '',
+        department: '',
+        role: 'user',
+        is_active: true,
+        password: '',
+        confirm_password: ''
+      });
       loadUsers();
     } catch (err) {
-      setAddError('Failed to create user. Check the details and try again.');
+      setAddError(err?.message || 'Failed to create user. Check the details and try again.');
     }
   };
+
+  const filteredColleges = addForm.user_campus
+    ? colleges.filter((college) => String(college.college_campus) === String(addForm.user_campus))
+    : colleges;
+
+  const filteredDepartments = addForm.college
+    ? departments.filter((department) => String(department.department_college) === String(addForm.college))
+    : departments;
+
+  const editFilteredColleges = formData.user_campus
+    ? colleges.filter((college) => String(college.college_campus) === String(formData.user_campus))
+    : colleges;
+
+  const editFilteredDepartments = formData.college
+    ? departments.filter((department) => String(department.department_college) === String(formData.college))
+    : departments;
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -450,6 +536,18 @@ const UserManagement = () => {
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
             </div>
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Username</label>
+              <input type="text" value={addForm.username} onChange={e => setAddForm(p => ({ ...p, username: e.target.value }))}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
+            </div>
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Gmail Account</label>
+              <input type="email" value={addForm.gmail_account} onChange={e => setAddForm(p => ({ ...p, gmail_account: e.target.value }))}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
+            </div>
+          </div>
           <div>
             <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Email *</label>
             <input required type="email" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
@@ -467,15 +565,33 @@ const UserManagement = () => {
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Campus</label>
+              <select value={addForm.user_campus} onChange={e => setAddForm(p => ({ ...p, user_campus: e.target.value, college: '', department: '' }))}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}>
+                <option value="">Select Campus</option>
+                {campuses.map(c => <option key={c.id} value={c.id}>{c.campus_name}</option>)}
+              </select>
+            </div>
             <div>
               <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>College</label>
               <select value={addForm.college} onChange={e => setAddForm(p => ({ ...p, college: e.target.value }))}
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}>
                 <option value="">Select College</option>
-                {colleges.map(c => <option key={c.id} value={c.id}>{c.college_name}</option>)}
+                {filteredColleges.map(c => <option key={c.id} value={c.id}>{c.college_name}</option>)}
               </select>
             </div>
+            <div>
+              <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Department</label>
+              <select value={addForm.department} onChange={e => setAddForm(p => ({ ...p, department: e.target.value }))}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}>
+                <option value="">Select Department</option>
+                {filteredDepartments.map(d => <option key={d.id} value={d.id}>{d.department_name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Role *</label>
               <select required value={addForm.role} onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}
@@ -484,6 +600,17 @@ const UserManagement = () => {
                   <option key={roleCode} value={roleCode}>{getRoleLabel(roleCode)}</option>
                 ))}
               </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={addForm.is_active}
+                  onChange={(e) => setAddForm(p => ({ ...p, is_active: e.target.checked }))}
+                  className="mr-2"
+                />
+                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Active User</span>
+              </label>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -549,6 +676,33 @@ const UserManagement = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                Username
+              </label>
+              <input
+                type="text"
+                name="username"
+                value={formData.username}
+                onChange={handleInputChange}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+            <div>
+              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                Gmail Account
+              </label>
+              <input
+                type="email"
+                name="gmail_account"
+                value={formData.gmail_account}
+                onChange={handleInputChange}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+          </div>
+
           <div>
             <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
               Email
@@ -578,18 +732,69 @@ const UserManagement = () => {
             </div>
             <div>
               <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                Campus ID
+              </label>
+              <input
+                type="text"
+                name="campus_id"
+                value={formData.campus_id}
+                onChange={handleInputChange}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                Campus
+              </label>
+              <select
+                name="user_campus"
+                value={formData.user_campus}
+                onChange={(e) => setFormData(prev => ({ ...prev, user_campus: e.target.value, college: '', department: '' }))}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+              >
+                <option value="">Select Campus</option>
+                {campuses.map(campus => (
+                  <option key={campus.id} value={campus.id}>
+                    {campus.campus_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 College
               </label>
               <select
                 name="college"
                 value={formData.college}
-                onChange={handleInputChange}
+                onChange={(e) => setFormData(prev => ({ ...prev, college: e.target.value, department: '' }))}
                 className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
               >
                 <option value="">Select College</option>
-                {colleges.map(college => (
+                {editFilteredColleges.map(college => (
                   <option key={college.id} value={college.id}>
                     {college.college_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                Department
+              </label>
+              <select
+                name="department"
+                value={formData.department}
+                onChange={handleInputChange}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+              >
+                <option value="">Select Department</option>
+                {editFilteredDepartments.map(department => (
+                  <option key={department.id} value={department.id}>
+                    {department.department_name}
                   </option>
                 ))}
               </select>

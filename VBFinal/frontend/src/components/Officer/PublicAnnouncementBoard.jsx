@@ -8,6 +8,7 @@ const PublicAnnouncementBoard = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     title: '',
     message: '',
@@ -33,34 +34,62 @@ const PublicAnnouncementBoard = () => {
     loadAnnouncements();
   }, []);
 
-  const handleCreate = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.title.trim() || !form.message.trim()) return;
 
     setSubmitting(true);
     setError('');
     try {
-      await apiService.createPublicAnnouncement({
+      const payload = {
         title: form.title.trim(),
         message: form.message.trim(),
         is_pinned: form.is_pinned,
         expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null
-      });
+      };
+
+      if (editingId) {
+        await apiService.updatePublicAnnouncement(editingId, payload);
+      } else {
+        await apiService.createPublicAnnouncement(payload);
+      }
+
+      setEditingId(null);
       setForm({ title: '', message: '', is_pinned: false, expires_at: '' });
       await loadAnnouncements();
     } catch (err) {
-      setError(err.message || 'Failed to create announcement');
+      setError(err.message || `Failed to ${editingId ? 'update' : 'create'} announcement`);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setForm({
+      title: item.title || '',
+      message: item.message || '',
+      is_pinned: !!item.is_pinned,
+      expires_at: item.expires_at ? new Date(item.expires_at).toISOString().slice(0, 16) : ''
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm({ title: '', message: '', is_pinned: false, expires_at: '' });
+    setError('');
+  };
+
   const handleToggleActive = async (item) => {
     try {
-      await apiService.updatePublicAnnouncement(item.id, { is_active: !item.is_active });
+      if (item.is_active) {
+        await apiService.hidePublicAnnouncement(item.id);
+      } else {
+        await apiService.showPublicAnnouncement(item.id);
+      }
       await loadAnnouncements();
     } catch (err) {
-      setError(err.message || 'Failed to update announcement');
+      setError(err.message || `Failed to ${item.is_active ? 'hide' : 'show'} announcement`);
     }
   };
 
@@ -80,10 +109,12 @@ const PublicAnnouncementBoard = () => {
       </div>
 
       <form
-        onSubmit={handleCreate}
+        onSubmit={handleSubmit}
         className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl p-5 space-y-4`}
       >
-        <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Post New Announcement</h3>
+        <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {editingId ? 'Edit Announcement' : 'Post New Announcement'}
+        </h3>
 
         <div>
           <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Title</label>
@@ -127,13 +158,26 @@ const PublicAnnouncementBoard = () => {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
-        >
-          {submitting ? 'Posting...' : 'Post Announcement'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60"
+          >
+            {submitting
+              ? (editingId ? 'Updating...' : 'Posting...')
+              : (editingId ? 'Update Announcement' : 'Post Announcement')}
+          </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className={`px-5 py-2.5 rounded-lg font-semibold border ${isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
 
       {error && (
@@ -178,6 +222,12 @@ const PublicAnnouncementBoard = () => {
                       className="px-3 py-1.5 text-xs rounded bg-yellow-500 text-white hover:bg-yellow-600"
                     >
                       {item.is_active ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Edit
                     </button>
                     <button
                       onClick={() => handleDelete(item.id)}

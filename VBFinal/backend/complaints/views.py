@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response as DRFResponse
 from rest_framework.exceptions import ValidationError
+from django.http import FileResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.db import models
@@ -135,7 +136,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         except Exception:
             pass
             
-        output_serializer = ComplaintSerializer(complaint)
+        output_serializer = ComplaintSerializer(complaint, context={'request': request})
         return DRFResponse(output_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="assign")
@@ -271,6 +272,43 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         complaint = self.get_object()
         comments = Comment.objects.filter(complaint=complaint).order_by('-created_at')
         serializer = CommentSerializer(comments, many=True)
+        return DRFResponse(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"], url_path=r"attachments/(?P<attachment_id>[^/.]+)/download")
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Download/open complaint attachment via stable API URL."""
+        complaint = self.get_object()
+        attachment = get_object_or_404(ComplaintAttachment, id=attachment_id, complaint=complaint)
+
+        filename = attachment.filename or "attachment"
+        content_type = attachment.content_type or "application/octet-stream"
+
+        if attachment.file_data:
+            response = HttpResponse(attachment.file_data, content_type=content_type)
+            response["Content-Disposition"] = f'inline; filename="{filename}"'
+            return response
+
+        if attachment.file:
+            try:
+                file_handle = attachment.file.open("rb")
+                response = FileResponse(file_handle, content_type=content_type)
+                response["Content-Disposition"] = f'inline; filename="{filename}"'
+                return response
+            except Exception as exc:
+                raise Http404("Attachment file is unavailable") from exc
+
+        raise Http404("Attachment file is unavailable")
+
+    @action(detail=False, methods=['get'], url_path='cc')
+    def cc_complaints(self, request):
+        """Get complaints where the current user is CC'd"""
+        if not request.user.is_authenticated:
+            return DRFResponse({"detail": "Not authenticated"}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        user_email = request.user.email
+        cc_complaints = Complaint.objects.filter(cc_list__email=user_email).distinct().order_by('-created_at')
+        
+        serializer = self.get_serializer(cc_complaints, many=True)
         return DRFResponse(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -427,6 +465,15 @@ class NotificationViewSet(viewsets.ModelViewSet):
 class PublicAnnouncementViewSet(viewsets.ModelViewSet):
     serializer_class = PublicAnnouncementSerializer
 
+    def _can_manage_announcement(self, user, announcement):
+        if not user.is_authenticated:
+            return False
+        if getattr(user, 'role', None) == 'admin':
+            return True
+        if getattr(user, 'role', None) == 'officer':
+            return announcement.created_by_id == user.id
+        return False
+
     def get_authenticators(self):
         # Avoid 401 on public endpoints when stale/invalid Authorization headers are present.
         if getattr(self, 'action', None) in ['list', 'retrieve']:
@@ -474,6 +521,32 @@ class PublicAnnouncementViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='hide')
+    def hide(self, request, pk=None):
+        announcement = self.get_object()
+        if not self._can_manage_announcement(request.user, announcement):
+            return DRFResponse(
+                {'error': 'You do not have permission to hide this announcement.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        announcement.is_active = False
+        announcement.save(update_fields=['is_active', 'updated_at'])
+        return DRFResponse(PublicAnnouncementSerializer(announcement).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='show')
+    def show(self, request, pk=None):
+        announcement = self.get_object()
+        if not self._can_manage_announcement(request.user, announcement):
+            return DRFResponse(
+                {'error': 'You do not have permission to show this announcement.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        announcement.is_active = True
+        announcement.save(update_fields=['is_active', 'updated_at'])
+        return DRFResponse(PublicAnnouncementSerializer(announcement).data, status=status.HTTP_200_OK)
 
 
 class AssignmentViewSet(viewsets.ModelViewSet):

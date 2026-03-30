@@ -9,6 +9,7 @@ const PublicNavbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
     { name: 'Home', path: '/landing' },
@@ -38,7 +39,7 @@ const PublicNavbar = () => {
   };
 
   return (
-    <header className={`${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-100'} backdrop-blur-md shadow-md border-b fixed top-0 left-0 right-0 z-50`}>
+    <header className={`${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-100'} backdrop-blur-md shadow-md border-b fixed top-0 left-0 right-0 z-50 relative`}>
       <nav className="px-6 sm:px-8 lg:px-12 h-20 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center space-x-6 min-w-0">
@@ -83,6 +84,20 @@ const PublicNavbar = () => {
 
         {/* Right Side */}
         <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className={`lg:hidden p-2.5 rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
+            title="Toggle Menu"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {mobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+
           <button onClick={toggleTheme}
             className={`p-2.5 rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
             title="Toggle Theme">
@@ -164,10 +179,11 @@ const PublicNavbar = () => {
       </nav>
 
       {/* Mobile Menu */}
-      <div className="lg:hidden px-6 sm:px-8 pb-4 border-t border-gray-200 dark:border-gray-700">
+      <div className={`lg:hidden absolute top-full left-0 right-0 px-6 sm:px-8 pb-4 border-t shadow-md border-gray-200 dark:border-gray-700 ${isDark ? 'bg-gray-900/95' : 'bg-white/95'} ${mobileMenuOpen ? 'block' : 'hidden'}`}>
         <div className="flex flex-col space-y-2">
           {navItems.map((item) => (
             <a key={item.name} href={item.path}
+              onClick={() => setMobileMenuOpen(false)}
               className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-150 ${
                 location.pathname === item.path
                   ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'

@@ -1,10 +1,58 @@
 from rest_framework import serializers
+from django.urls import reverse
+from pathlib import Path
 from .models import Institution, Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment
 from .models import PublicAnnouncement
 
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
+ALLOWED_ATTACHMENT_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".txt", ".doc", ".docx"}
+ALLOWED_ATTACHMENT_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "application/pdf",
+    "text/plain",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024
+MAX_ATTACHMENTS_PER_COMPLAINT = 5
+
+
+def _validate_uploaded_file(uploaded_file):
+    extension = Path(uploaded_file.name).suffix.lower()
+    content_type = (uploaded_file.content_type or "").lower()
+
+    if extension not in ALLOWED_ATTACHMENT_EXTENSIONS:
+        raise serializers.ValidationError(
+            f"Unsupported file extension '{extension or 'none'}'. Allowed: {', '.join(sorted(ALLOWED_ATTACHMENT_EXTENSIONS))}."
+        )
+
+    if content_type and content_type not in ALLOWED_ATTACHMENT_CONTENT_TYPES:
+        raise serializers.ValidationError(
+            f"Unsupported file type '{content_type}'."
+        )
+
+    if uploaded_file.size > MAX_ATTACHMENT_SIZE:
+        raise serializers.ValidationError(
+            f"File '{uploaded_file.name}' exceeds 5MB size limit."
+        )
+
+
+def _attachment_payload(uploaded_file):
+    # Keep a DB copy of the uploaded file while preserving existing file storage behavior.
+    file_bytes = uploaded_file.read()
+    uploaded_file.seek(0)
+    return {
+        "file": uploaded_file,
+        "file_data": file_bytes,
+        "filename": uploaded_file.name,
+        "file_size": uploaded_file.size,
+        "content_type": uploaded_file.content_type,
+    }
 
 
 class ComplaintUserSerializer(serializers.ModelSerializer):
@@ -124,7 +172,33 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
         model = Complaint
         fields = ["title", "description", "institution", "category", "attachment", "cc_emails", "cc_officer_ids"]
 
+    def validate(self, attrs):
+        request = self.context.get('request')
+        uploaded_files = []
+
+        if request and hasattr(request, 'FILES'):
+            uploaded_files = [
+                uploaded_file
+                for key, uploaded_file in request.FILES.items()
+                if key.startswith('attachment_')
+            ]
+
+        if attrs.get('attachment'):
+            uploaded_files.append(attrs['attachment'])
+
+        if len(uploaded_files) > MAX_ATTACHMENTS_PER_COMPLAINT:
+            raise serializers.ValidationError(
+                f"Maximum {MAX_ATTACHMENTS_PER_COMPLAINT} files are allowed per complaint."
+            )
+
+        for uploaded_file in uploaded_files:
+            _validate_uploaded_file(uploaded_file)
+
+        return attrs
+
     def create(self, validated_data):
+        from accounts.email_service import EmailService
+        
         cc_emails = validated_data.pop('cc_emails', [])
         cc_officer_ids = validated_data.pop('cc_officer_ids', [])
         request = self.context.get('request')
@@ -135,10 +209,7 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
                 if key.startswith('attachment_'):
                     ComplaintAttachment.objects.create(
                         complaint=complaint,
-                        file=file,
-                        filename=file.name,
-                        file_size=file.size,
-                        content_type=file.content_type
+                        **_attachment_payload(file)
                     )
 
         for email in cc_emails:
@@ -146,23 +217,47 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
 
         cc_officers = User.objects.filter(id__in=cc_officer_ids, role='officer')
         for officer in cc_officers:
+            # Create CC record with officer's email
             ComplaintCC.objects.get_or_create(complaint=complaint, email=officer.email)
+            
+            # Create in-app notification
             Notification.objects.create(
                 user=officer,
                 complaint=complaint,
                 notification_type='complaint_update',
                 title=f"CC Complaint: {complaint.title}",
-                message=f"You were added as CC on complaint '{complaint.title}'.",
+                message=f"You were added as CC on complaint '{complaint.title}' by {complaint.submitted_by.first_name} {complaint.submitted_by.last_name}.",
             )
+            
+            # Send email notification
+            try:
+                EmailService.send_cc_complaint_notification(officer, complaint)
+            except Exception as e:
+                # Log error but don't fail the complaint creation
+                print(f"Failed to send CC email to {officer.email}: {str(e)}")
 
         return complaint
 
 
 class ComplaintAttachmentSerializer(serializers.ModelSerializer):
+    stored_in_database = serializers.SerializerMethodField()
+    download_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ComplaintAttachment
-        fields = ["id", "file", "filename", "file_size", "content_type", "uploaded_at"]
+        fields = ["id", "file", "filename", "file_size", "content_type", "uploaded_at", "stored_in_database", "download_url"]
         read_only_fields = ["id", "uploaded_at"]
+
+    def get_stored_in_database(self, obj):
+        return bool(obj.file_data)
+
+    def get_download_url(self, obj):
+        path = reverse('complaint-download-attachment', kwargs={
+            'pk': obj.complaint_id,
+            'attachment_id': obj.id,
+        })
+        request = self.context.get('request')
+        return request.build_absolute_uri(path) if request else path
 
 
 class CCSerializer(serializers.ModelSerializer):
@@ -178,6 +273,7 @@ class ComplaintSerializer(serializers.ModelSerializer):
     current_level = ResolverLevelSerializer(read_only=True)
     attachments = ComplaintAttachmentSerializer(many=True, read_only=True)
     cc_list = CCSerializer(many=True, read_only=True)
+    is_cc_user = serializers.SerializerMethodField()
 
     class Meta:
         model = Complaint
@@ -186,8 +282,16 @@ class ComplaintSerializer(serializers.ModelSerializer):
             "title", "description", "attachment", "attachments", "cc_list",
             "created_at", "updated_at", "status",
             "assigned_officer", "current_level", "escalation_deadline",
+            "is_cc_user"
         ]
         read_only_fields = ["complaint_id", "created_at", "updated_at", "escalation_deadline"]
+
+    def get_is_cc_user(self, obj):
+        """Check if the current user is CC'd on this complaint"""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.cc_list.filter(email=request.user.email).exists()
+        return False
 
     def create(self, validated_data):
         request = self.context.get('request')
@@ -197,8 +301,7 @@ class ComplaintSerializer(serializers.ModelSerializer):
                 if key.startswith('attachment_'):
                     ComplaintAttachment.objects.create(
                         complaint=complaint,
-                        file=file, filename=file.name,
-                        file_size=file.size, content_type=file.content_type
+                        **_attachment_payload(file)
                     )
         return complaint
 

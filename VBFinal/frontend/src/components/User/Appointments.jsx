@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const STATUS_COLORS = {
   pending:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -10,6 +11,7 @@ const STATUS_COLORS = {
 
 const Appointments = () => {
   const { isDark } = useTheme();
+  const { t } = useLanguage();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,9 +41,9 @@ const Appointments = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Appointments</h2>
+          <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('appointments')}</h2>
           <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            Appointments scheduled by officers for your complaints
+            {t('appointment_scheduled_by_officers')}
           </p>
         </div>
       </div>
@@ -50,9 +52,9 @@ const Appointments = () => {
       {appointments.length === 0 ? (
         <div className={`${cardCls} text-center py-12`}>
           <div className="text-4xl mb-3">📅</div>
-          <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>No appointments from officers yet</p>
+          <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t('no_appointments_yet')}</p>
           <p className={`text-sm mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-            Scheduled appointments from officers will appear here.
+            {t('appointments_will_appear')}
           </p>
         </div>
       ) : (
