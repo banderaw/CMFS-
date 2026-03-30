@@ -26,10 +26,30 @@ class Category(models.Model):
         default=None
     )
 
-    name = models.CharField(max_length=100)
-    name_amharic = models.CharField(max_length=100, blank=True)
-    description = models.TextField(blank=True)
-    description_amharic = models.TextField(blank=True)
+    office_name = models.CharField(max_length=150)
+    office_description = models.TextField(blank=True)
+
+    campus = models.ForeignKey(
+        "accounts.Campus",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="complaint_categories",
+    )
+    college = models.ForeignKey(
+        "accounts.College",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="complaint_categories",
+    )
+    department = models.ForeignKey(
+        "accounts.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="complaint_categories",
+    )
 
     parent = models.ForeignKey(
         "self",
@@ -43,8 +63,8 @@ class Category(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["name"]
-        unique_together = ("institution", "name")
+        ordering = ["office_name"]
+        unique_together = ("institution", "office_name")
 
     def save(self, *args, **kwargs):
         if not self.category_id:
@@ -52,7 +72,7 @@ class Category(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.name
+        return self.office_name
 
 
 

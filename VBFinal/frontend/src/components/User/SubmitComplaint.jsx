@@ -18,8 +18,8 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
   });
   const [files, setFiles] = useState([]);
   const [formErrors, setFormErrors] = useState({});
-  const [ccEmails, setCcEmails] = useState([]);
-  const [ccInput, setCcInput] = useState('');
+  const [officers, setOfficers] = useState([]);
+  const [ccOfficerIds, setCcOfficerIds] = useState([]);
 
   useEffect(() => {
     loadCategories();
@@ -29,6 +29,10 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
     try {
       const response = await apiService.getCategoriesByLanguage(language);
       setCategories(response || []);
+
+      const usersData = await apiService.getAllUsers();
+      const allUsers = usersData?.results || usersData || [];
+      setOfficers(allUsers.filter((u) => u.role === 'officer'));
     } catch (error) {
       console.error('Failed to load categories:', error);
     }
@@ -70,24 +74,13 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const addCcEmail = (raw) => {
-    const email = raw.trim().toLowerCase();
-    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (valid && !ccEmails.includes(email)) setCcEmails(prev => [...prev, email]);
-    setCcInput('');
+  const toggleCcOfficer = (officerId) => {
+    setCcOfficerIds((prev) => (
+      prev.includes(officerId)
+        ? prev.filter((id) => id !== officerId)
+        : [...prev, officerId]
+    ));
   };
-
-  const handleCcKeyDown = (e) => {
-    if (['Enter', ',', ' '].includes(e.key)) {
-      e.preventDefault();
-      if (ccInput.trim()) addCcEmail(ccInput);
-    }
-    if (e.key === 'Backspace' && !ccInput && ccEmails.length) {
-      setCcEmails(prev => prev.slice(0, -1));
-    }
-  };
-
-  const removeCc = (email) => setCcEmails(prev => prev.filter(e => e !== email));
 
   const submitComplaint = async (e) => {
     e.preventDefault();
@@ -101,9 +94,9 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       formData.append('institution', complaintForm.institution);
       formData.append('category', complaintForm.category);
 
-      // CC emails as JSON
-      if (ccEmails.length > 0) {
-        formData.append('cc_emails', JSON.stringify(ccEmails));
+      // CC officers as JSON
+      if (ccOfficerIds.length > 0) {
+        formData.append('cc_officer_ids', JSON.stringify(ccOfficerIds));
       }
 
       // Add files to form data
@@ -116,8 +109,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       if (response) {
         setComplaintForm({ title: '', description: '', institution: '', category: '' });
         setFiles([]);
-        setCcEmails([]);
-        setCcInput('');
+        setCcOfficerIds([]);
         setFormErrors({});
         setSubmitSuccess(true);
 
@@ -238,27 +230,32 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
             {/* CC */}
             <div>
               <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {language === 'am' ? 'ካርቦን ኮፒ (CC) — ኢሜይሎች' : 'Carbon Copy (CC) — Notify others'}
+                {language === 'am' ? 'CC ኦፊሰሮች ይምረጡ' : 'CC Officers (Select one or more)'}
               </label>
-              <div className={`flex flex-wrap gap-2 min-h-[44px] w-full border rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
-                {ccEmails.map(email => (
-                  <span key={email} className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-medium px-2 py-1 rounded-full">
-                    {email}
-                    <button type="button" onClick={() => removeCc(email)} className="hover:text-red-500 leading-none">✕</button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  value={ccInput}
-                  onChange={e => setCcInput(e.target.value)}
-                  onKeyDown={handleCcKeyDown}
-                  onBlur={() => ccInput.trim() && addCcEmail(ccInput)}
-                  placeholder={ccEmails.length === 0 ? (language === 'am' ? 'ኢሜይል ያስገቡ፣ Enter ይጫኑ' : 'Type email, press Enter or comma') : ''}
-                  className={`flex-1 min-w-[180px] bg-transparent text-sm outline-none ${isDark ? 'text-white placeholder-gray-400' : 'text-gray-900 placeholder-gray-400'}`}
-                />
+              <div className={`w-full border rounded-lg px-3 py-3 max-h-52 overflow-y-auto ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
+                {officers.length === 0 ? (
+                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {language === 'am' ? 'ኦፊሰሮች አልተገኙም' : 'No officers found'}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {officers.map((officer) => (
+                      <label key={officer.id} className={`flex items-start gap-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                        <input
+                          type="checkbox"
+                          checked={ccOfficerIds.includes(officer.id)}
+                          onChange={() => toggleCcOfficer(officer.id)}
+                        />
+                        <span>{officer.first_name} {officer.last_name} ({officer.email})</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
               <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                {language === 'am' ? 'ቅሬታው ሲቀርብ ለእነዚህ ሰዎች ማሳወቂያ ይላካል' : 'These people will be notified when the complaint is submitted'}
+                {language === 'am'
+                  ? `የተመረጡ ኦፊሰሮች: ${ccOfficerIds.length}`
+                  : `Selected officers: ${ccOfficerIds.length}`}
               </p>
             </div>
 
@@ -328,8 +325,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
                 onClick={() => {
                   setComplaintForm({ title: '', description: '', institution: '', category: '' });
                   setFiles([]);
-                  setCcEmails([]);
-                  setCcInput('');
+                  setCcOfficerIds([]);
                   setFormErrors({});
                 }}
                 className={`px-6 py-3 rounded-lg font-medium transition-colors ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}

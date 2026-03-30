@@ -38,16 +38,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="by-language")
     def by_language(self, request):
-        """Get categories with language-specific names"""
-        language = request.query_params.get('lang', 'en')
+        """Get categories using the canonical office field names."""
         categories = self.get_queryset()
         
         data = []
         for cat in categories:
             category_data = {
                 'category_id': cat.category_id,
-                'name': cat.name_amharic if language == 'am' and cat.name_amharic else cat.name,
-                'description': cat.description_amharic if language == 'am' and cat.description_amharic else cat.description,
+                'name': cat.office_name,
+                'description': cat.office_description,
                 'is_active': cat.is_active
             }
             data.append(category_data)
@@ -117,6 +116,14 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         except (ValueError, TypeError):
             cc_emails = []
         data.setlist('cc_emails', cc_emails)
+
+        # Parse cc_officer_ids from JSON string (sent via FormData)
+        raw_cc_officers = data.get('cc_officer_ids', '[]')
+        try:
+            cc_officer_ids = json.loads(raw_cc_officers) if isinstance(raw_cc_officers, str) else raw_cc_officers
+        except (ValueError, TypeError):
+            cc_officer_ids = []
+        data.setlist('cc_officer_ids', cc_officer_ids)
 
         serializer = self.get_serializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -365,6 +372,12 @@ class NotificationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Users can only see their own notifications"""
+        if getattr(self, 'swagger_fake_view', False):
+            return Notification.objects.none()
+
+        if not self.request.user.is_authenticated:
+            return Notification.objects.none()
+
         return Notification.objects.filter(user=self.request.user)
 
     @action(detail=False, methods=['get'], url_path='unread')
@@ -430,8 +443,8 @@ class PublicAnnouncementViewSet(viewsets.ModelViewSet):
         user = self.request.user
 
         if self.action in ['list', 'retrieve']:
-            if user.is_authenticated and getattr(user, 'role', None) in ('officer', 'admin', 'super_admin'):
-                if user.role in ('admin', 'super_admin'):
+            if user.is_authenticated and getattr(user, 'role', None) in ('officer', 'admin'):
+                if user.role == 'admin':
                     return queryset
                 return queryset.filter(created_by=user)
 
@@ -443,7 +456,7 @@ class PublicAnnouncementViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return PublicAnnouncement.objects.none()
 
-        if getattr(user, 'role', None) in ('admin', 'super_admin'):
+        if getattr(user, 'role', None) == 'admin':
             return queryset
 
         if getattr(user, 'role', None) == 'officer':
@@ -452,7 +465,7 @@ class PublicAnnouncementViewSet(viewsets.ModelViewSet):
         return PublicAnnouncement.objects.none()
 
     def create(self, request, *args, **kwargs):
-        if getattr(request.user, 'role', None) not in ('officer', 'admin', 'super_admin'):
+        if getattr(request.user, 'role', None) not in ('officer', 'admin'):
             return DRFResponse(
                 {'error': 'Only officers and admins can create announcements.'},
                 status=status.HTTP_403_FORBIDDEN
@@ -474,7 +487,13 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return Appointment.objects.none()
+
         user = self.request.user
+        if not user.is_authenticated:
+            return Appointment.objects.none()
+
         if user.role in ('officer', 'admin'):
             return Appointment.objects.all()
 

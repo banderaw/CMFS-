@@ -1,8 +1,7 @@
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import Group, Permission
 from rest_framework import serializers
 
-from .models import Campus, College, Department, Role, SystemLog, User
+from .models import Campus, College, Department, SystemLog, User
 
 
 class SystemLogSerializer(serializers.ModelSerializer):
@@ -67,95 +66,12 @@ class DepartmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['college_name', 'created_at']
 
 
-class RoleSerializer(serializers.ModelSerializer):
-    users_count = serializers.IntegerField(source='users.count', read_only=True)
-
-    class Meta:
-        model = Role
-        fields = [
-            'id',
-            'name',
-            'code',
-            'description',
-            'level',
-            'is_system',
-            'is_active',
-            'permissions',
-            'created_at',
-            'users_count',
-        ]
-        read_only_fields = ['created_at', 'users_count']
-
-
-class UserMiniSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'role']
-
-
-class PermissionSerializer(serializers.ModelSerializer):
-    app_label = serializers.CharField(source='content_type.app_label', read_only=True)
-    model = serializers.CharField(source='content_type.model', read_only=True)
-
-    class Meta:
-        model = Permission
-        fields = ['id', 'name', 'codename', 'app_label', 'model']
-
-
-class GroupSerializer(serializers.ModelSerializer):
-    permissions_detail = PermissionSerializer(source='permissions', many=True, read_only=True)
-    users_detail = UserMiniSerializer(source='custom_user_set', many=True, read_only=True)
-    permission_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1), write_only=True, required=False
-    )
-    user_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1), write_only=True, required=False
-    )
-
-    class Meta:
-        model = Group
-        fields = [
-            'id',
-            'name',
-            'permissions_detail',
-            'users_detail',
-            'permission_ids',
-            'user_ids',
-        ]
-
-    def create(self, validated_data):
-        permission_ids = validated_data.pop('permission_ids', [])
-        user_ids = validated_data.pop('user_ids', [])
-
-        group = Group.objects.create(**validated_data)
-        if permission_ids:
-            group.permissions.set(Permission.objects.filter(id__in=permission_ids))
-        if user_ids:
-            group.custom_user_set.set(User.objects.filter(id__in=user_ids))
-        return group
-
-    def update(self, instance, validated_data):
-        permission_ids = validated_data.pop('permission_ids', None)
-        user_ids = validated_data.pop('user_ids', None)
-
-        instance.name = validated_data.get('name', instance.name)
-        instance.save()
-
-        if permission_ids is not None:
-            instance.permissions.set(Permission.objects.filter(id__in=permission_ids))
-        if user_ids is not None:
-            instance.custom_user_set.set(User.objects.filter(id__in=user_ids))
-
-        return instance
-
-
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
     user_campus_detail = CampusSerializer(source='user_campus', read_only=True)
     college_detail = CollegeSerializer(source='college', read_only=True)
     department_detail = DepartmentSerializer(source='department', read_only=True)
-    role_ref_detail = RoleSerializer(source='role_ref', read_only=True)
 
     class Meta:
         model = User
@@ -174,8 +90,6 @@ class UserSerializer(serializers.ModelSerializer):
             'department_detail',
             'phone',
             'role',
-            'role_ref',
-            'role_ref_detail',
             'campus_id',
             'is_active',
             'is_email_verified',
@@ -192,7 +106,6 @@ class UserSerializer(serializers.ModelSerializer):
             'user_campus_detail',
             'college_detail',
             'department_detail',
-            'role_ref_detail',
             'date_joined',
             'last_login',
         ]

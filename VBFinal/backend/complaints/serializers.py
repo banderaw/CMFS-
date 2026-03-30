@@ -21,16 +21,75 @@ class InstitutionSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    campus = serializers.PrimaryKeyRelatedField(
+        queryset=Category._meta.get_field("campus").remote_field.model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    college = serializers.PrimaryKeyRelatedField(
+        queryset=Category._meta.get_field("college").remote_field.model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    department = serializers.PrimaryKeyRelatedField(
+        queryset=Category._meta.get_field("department").remote_field.model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
     institution_name = serializers.CharField(source='institution.name', read_only=True)
-    parent_name = serializers.CharField(source='parent.name', read_only=True)
+    parent_name = serializers.CharField(source='parent.office_name', read_only=True)
+    campus_name = serializers.CharField(source='campus.campus_name', read_only=True)
+    college_name = serializers.CharField(source='college.college_name', read_only=True)
+    department_name = serializers.CharField(source='department.department_name', read_only=True)
 
     class Meta:
         model = Category
         fields = [
-            "category_id", "institution", "institution_name", "name", "name_amharic", 
-            "description", "description_amharic", "parent", "parent_name", "is_active", "created_at"
+            "category_id",
+            "institution",
+            "institution_name",
+            "office_name",
+            "office_description",
+            "campus",
+            "campus_name",
+            "college",
+            "college_name",
+            "department",
+            "department_name",
+            "parent",
+            "parent_name",
+            "is_active",
+            "created_at",
         ]
         read_only_fields = ["category_id", "created_at"]
+
+    def validate(self, attrs):
+        # Accept empty strings from form submissions for nullable relations.
+        for relation_key in ["campus", "college", "department"]:
+            raw_value = self.initial_data.get(relation_key, None)
+            if raw_value == "" and relation_key not in attrs:
+                attrs[relation_key] = None
+
+        # Backward compatibility for clients still sending legacy keys.
+        if not attrs.get("office_name"):
+            legacy_name = self.initial_data.get("name")
+            if legacy_name:
+                attrs["office_name"] = legacy_name
+
+        if "office_description" not in attrs:
+            legacy_description = self.initial_data.get("description")
+            if legacy_description is not None:
+                attrs["office_description"] = legacy_description
+
+        return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Keep `name` and `description` in response payloads for older UI paths.
+        data["name"] = data.get("office_name", "")
+        data["description"] = data.get("office_description", "")
+        return data
 
 
 class ResolverLevelSerializer(serializers.ModelSerializer):
@@ -45,7 +104,7 @@ class ResolverLevelSerializer(serializers.ModelSerializer):
 class CategoryResolverSerializer(serializers.ModelSerializer):
     officer_name = serializers.CharField(source='officer.full_name', read_only=True)
     level_name = serializers.CharField(source='level.name', read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    category_name = serializers.CharField(source='category.office_name', read_only=True)
 
     class Meta:
         model = CategoryResolver
@@ -57,13 +116,17 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
     cc_emails = serializers.ListField(
         child=serializers.EmailField(), required=False, write_only=True, default=list
     )
+    cc_officer_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, write_only=True, default=list
+    )
 
     class Meta:
         model = Complaint
-        fields = ["title", "description", "institution", "category", "attachment", "cc_emails"]
+        fields = ["title", "description", "institution", "category", "attachment", "cc_emails", "cc_officer_ids"]
 
     def create(self, validated_data):
         cc_emails = validated_data.pop('cc_emails', [])
+        cc_officer_ids = validated_data.pop('cc_officer_ids', [])
         request = self.context.get('request')
         complaint = Complaint.objects.create(**validated_data)
 
@@ -80,6 +143,17 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
 
         for email in cc_emails:
             ComplaintCC.objects.get_or_create(complaint=complaint, email=email)
+
+        cc_officers = User.objects.filter(id__in=cc_officer_ids, role='officer')
+        for officer in cc_officers:
+            ComplaintCC.objects.get_or_create(complaint=complaint, email=officer.email)
+            Notification.objects.create(
+                user=officer,
+                complaint=complaint,
+                notification_type='complaint_update',
+                title=f"CC Complaint: {complaint.title}",
+                message=f"You were added as CC on complaint '{complaint.title}'.",
+            )
 
         return complaint
 

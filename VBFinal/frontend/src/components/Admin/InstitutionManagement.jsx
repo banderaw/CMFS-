@@ -3,15 +3,17 @@ import { useTheme } from '../../contexts/ThemeContext';
 import apiService from '../../services/api';
 import Modal from '../UI/Modal';
 import ResolverLevelManagement from './ResolverLevelManagement';
+import { CategoryManagement } from './CategoryManagement';
+import CategoryResolverManagement from './CategoryResolverManagement';
 
 const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, loading }) => {
   const thCls = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
   const tdCls = 'px-4 py-3 whitespace-nowrap text-sm';
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-700'}`}>{title}</h3>
-        <button onClick={onAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+        <button onClick={onAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm w-full sm:w-auto">
           + Add
         </button>
       </div>
@@ -19,7 +21,8 @@ const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, l
         {loading ? (
           <div className="text-center py-8 text-gray-500">Loading...</div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto">
+            <table className="min-w-[760px] w-full divide-y divide-gray-200">
             <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
               <tr>
                 {columns.map(c => <th key={c.key} className={thCls}>{c.label}</th>)}
@@ -47,7 +50,8 @@ const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, l
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </div>
     </div>
@@ -193,6 +197,8 @@ const InstitutionManagement = () => {
     { id: 'campuses', label: 'Campuses', icon: '🗺️' },
     { id: 'colleges', label: 'Colleges', icon: '🎓' },
     { id: 'departments', label: 'Departments', icon: '🏢' },
+    { id: 'offices', label: 'Office', icon: '📂' },
+    { id: 'office-assignments', label: 'Assignment', icon: '👥' },
     { id: 'resolver-levels', label: 'Resolver Levels', icon: '⚡' },
   ];
 
@@ -320,6 +326,12 @@ const InstitutionManagement = () => {
       case 'resolver-levels':
         return <ResolverLevelManagement />;
 
+      case 'offices':
+        return <CategoryManagement />;
+
+      case 'office-assignments':
+        return <CategoryResolverManagement />;
+
       default:
         return null;
     }
@@ -329,7 +341,7 @@ const InstitutionManagement = () => {
     <div className="space-y-6">
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow`}>
         <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          <nav className="-mb-px flex space-x-1 px-4 overflow-x-auto">
+          <nav className="-mb-px flex space-x-1 px-2 sm:px-4 overflow-x-auto scrollbar-thin">
             {tabs.map(tab => (
               <button
                 key={tab.id}

@@ -32,7 +32,6 @@ const UserManagement = () => {
   });
 
   const [colleges, setColleges] = useState([]);
-  const [roles, setRoles] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({
     first_name: '', last_name: '', email: '', phone: '',
@@ -43,7 +42,6 @@ const UserManagement = () => {
   useEffect(() => {
     loadUsers();
     apiService.getColleges().then(d => setColleges(d.results ?? d)).catch(() => {});
-    apiService.getRoles().then(d => setRoles(d.results ?? d)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -195,19 +193,10 @@ const UserManagement = () => {
   };
 
   const availableRoleCodes = React.useMemo(() => {
-    const fromRoles = (roles || []).map(r => r.code).filter(Boolean);
-    if (fromRoles.length > 0) {
-      return fromRoles;
-    }
-
-    // Fallback for environments where /roles is unavailable.
-    const fromUsers = Array.from(new Set((users || []).map(u => u.role).filter(Boolean)));
-    return fromUsers.length > 0 ? fromUsers : ['user', 'officer', 'admin'];
-  }, [roles, users]);
+    return ['user', 'officer', 'admin'];
+  }, []);
 
   const getRoleLabel = (code) => {
-    const roleObj = (roles || []).find(r => r.code === code);
-    if (roleObj?.name) return roleObj.name;
     if (!code) return 'Unknown';
     return code
       .replace(/_/g, ' ')

@@ -17,7 +17,6 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
 
   const getDashboardPath = () => {
     const role = getUserRole();
-    if (role === 'super_admin') return '/super-admin';
     if (role === 'admin') return '/admin';
     if (role === 'officer') return '/officer';
     return '/user';

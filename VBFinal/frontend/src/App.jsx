@@ -40,8 +40,6 @@ const RootRedirect = () => {
 
   const role = getUserRole();
   switch (role) {
-    case 'super_admin':
-      return <Navigate to="/super-admin" replace />;
     case 'admin':
       return <Navigate to="/admin" replace />;
     case 'officer':
@@ -58,7 +56,7 @@ const AppContent = () => {
   const { user, getUserRole } = useAuth();
 
   // Show maintenance page if maintenance mode is enabled and user is not admin
-  if (isMaintenanceMode && (!user || !['admin', 'super_admin'].includes(getUserRole()))) {
+  if (isMaintenanceMode && (!user || getUserRole() !== 'admin')) {
     return <MaintenancePage message={maintenanceMessage} />;
   }
 
@@ -74,14 +72,6 @@ const AppContent = () => {
         <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Protected Routes */}
-        <Route
-          path="/super-admin"
-          element={
-            <ProtectedRoute requiredRole="super_admin">
-              <AdminDashboard initialTab="roles" />
-            </ProtectedRoute>
-          }
-        />
         <Route
           path="/admin"
           element={

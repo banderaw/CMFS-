@@ -85,8 +85,8 @@ export const AuthProvider = ({ children }) => {
     return user?.role || authService.getUserRole();
   };
 
-  const isSuperAdmin = () => user?.is_superuser || getUserRole() === 'super_admin';
-  const isAdmin = () => getUserRole() === 'admin' || isSuperAdmin();
+  const isSuperAdmin = () => false;
+  const isAdmin = () => getUserRole() === 'admin' || user?.is_superuser;
   const isOfficer = () => getUserRole() === 'officer';
   const isUser = () => getUserRole() === 'user';
 

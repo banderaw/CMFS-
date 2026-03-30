@@ -143,8 +143,6 @@ class AuthService {
   getRoleBasedRoute() {
     const role = this.getUserRole();
     switch (role) {
-      case 'super_admin':
-        return '/super-admin';
       case 'admin':
         return '/admin';
       case 'officer':

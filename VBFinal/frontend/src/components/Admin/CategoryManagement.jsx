@@ -4,12 +4,15 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import apiService from '../../services/api';
 import Modal from '../UI/Modal';
 
-const CategoryManagement = () => {
+export const CategoryManagement = () => {
   const { isDark } = useTheme();
   const { language, t } = useLanguage();
   const [categories, setCategories] = useState([]);
   const [filteredCategories, setFilteredCategories] = useState([]);
   const [institutions, setInstitutions] = useState([]);
+  const [campuses, setCampuses] = useState([]);
+  const [colleges, setColleges] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -25,11 +28,12 @@ const CategoryManagement = () => {
     search: ''
   });
   const [formData, setFormData] = useState({
-    name: '',
-    name_amharic: '',
-    description: '',
-    description_amharic: '',
+    office_name: '',
+    office_description: '',
     institution: '',
+    campus: '',
+    college: '',
+    department: '',
     parent: '',
     is_active: true
   });
@@ -49,8 +53,8 @@ const CategoryManagement = () => {
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase();
       filtered = filtered.filter(category => 
-        category.name.toLowerCase().includes(searchTerm) ||
-        (category.description && category.description.toLowerCase().includes(searchTerm))
+        (category.office_name || category.name || '').toLowerCase().includes(searchTerm) ||
+        ((category.office_description || category.description || '').toLowerCase().includes(searchTerm))
       );
     }
     
@@ -76,9 +80,12 @@ const CategoryManagement = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [categoriesResponse, institutionsData] = await Promise.all([
+      const [categoriesResponse, institutionsData, campusesData, collegesData, departmentsData] = await Promise.all([
         apiService.getCategories(pagination.currentPage),
-        apiService.getInstitutions()
+        apiService.getInstitutions(),
+        apiService.getCampuses(),
+        apiService.getColleges(),
+        apiService.getDepartments()
       ]);
       
       // Handle paginated response
@@ -94,6 +101,9 @@ const CategoryManagement = () => {
       }
       
       setInstitutions(institutionsData.results || institutionsData);
+      setCampuses(campusesData.results || campusesData);
+      setColleges(collegesData.results || collegesData);
+      setDepartments(departmentsData.results || departmentsData);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -108,16 +118,25 @@ const CategoryManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...formData,
+        campus: formData.campus || null,
+        college: formData.college || null,
+        department: formData.department || null,
+        institution: formData.institution || null,
+        parent: formData.parent || null,
+      };
+
       if (editingCategory) {
-        await apiService.updateCategory(editingCategory.category_id, formData);
+        await apiService.updateCategory(editingCategory.category_id, payload);
       } else {
-        await apiService.createCategory(formData);
+        await apiService.createCategory(payload);
       }
       
       fetchData();
       setShowModal(false);
       setEditingCategory(null);
-      setFormData({ name: '', name_amharic: '', description: '', description_amharic: '', institution: '', parent: '', is_active: true });
+      setFormData({ office_name: '', office_description: '', institution: '', campus: '', college: '', department: '', parent: '', is_active: true });
     } catch (error) {
       console.error('Error saving category:', error);
     }
@@ -126,11 +145,12 @@ const CategoryManagement = () => {
   const handleEdit = (category) => {
     setEditingCategory(category);
     setFormData({
-      name: category.name,
-      name_amharic: category.name_amharic || '',
-      description: category.description || '',
-      description_amharic: category.description_amharic || '',
+      office_name: category.office_name || category.name || '',
+      office_description: category.office_description || category.description || '',
       institution: category.institution || '',
+      campus: category.campus || '',
+      college: category.college || '',
+      department: category.department || '',
       parent: category.parent || '',
       is_active: category.is_active
     });
@@ -138,7 +158,7 @@ const CategoryManagement = () => {
   };
 
   const handleDelete = async (categoryId) => {
-    if (confirm('Are you sure you want to delete this category?')) {
+    if (confirm('Are you sure you want to delete this office?')) {
       try {
         await apiService.deleteCategory(categoryId);
         fetchData();
@@ -150,21 +170,29 @@ const CategoryManagement = () => {
 
   const openCreateModal = () => {
     setEditingCategory(null);
-    setFormData({ name: '', name_amharic: '', description: '', description_amharic: '', institution: '', parent: '', is_active: true });
+    setFormData({ office_name: '', office_description: '', institution: '', campus: '', college: '', department: '', parent: '', is_active: true });
     setShowModal(true);
   };
+
+  const filteredColleges = formData.campus
+    ? colleges.filter(college => String(college.college_campus) === String(formData.campus))
+    : colleges;
+
+  const filteredDepartments = formData.college
+    ? departments.filter(department => String(department.department_college) === String(formData.college))
+    : departments;
 
   if (loading) return <div className="text-center py-4">Loading...</div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-700">Category Management</h3>
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <h3 className="text-lg font-semibold text-gray-700">Office Management</h3>
         <button
           onClick={openCreateModal}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 w-full sm:w-auto"
         >
-          Add Category
+          Add Office
         </button>
       </div>
 
@@ -175,7 +203,7 @@ const CategoryManagement = () => {
             <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Search</label>
             <input
               type="text"
-              placeholder="Search categories..."
+              placeholder="Search offices..."
               value={filters.search}
               onChange={(e) => setFilters({...filters, search: e.target.value})}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
@@ -219,18 +247,22 @@ const CategoryManagement = () => {
 
       {/* Results Counter */}
       <div className="text-sm text-gray-600">
-        Showing {filteredCategories.length} of {pagination.totalItems} categories
+        Showing {filteredCategories.length} of {pagination.totalItems} offices
         {(filters.search || filters.status !== 'all' || filters.institution !== 'all') && 
           ` (filtered from ${categories.length} on this page)`
         }
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto">
+        <table className="min-w-[980px] w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Office Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campus</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">College</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Institution</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -240,10 +272,10 @@ const CategoryManagement = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredCategories.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
                   {filters.search || filters.status !== 'all' || filters.institution !== 'all' 
-                    ? 'No categories match the current filters.' 
-                    : 'No categories found. Click "Add Category" to create one.'}
+                    ? 'No offices match the current filters.' 
+                    : 'No offices found. Click "Add Office" to create one.'}
                 </td>
               </tr>
             ) : (
@@ -251,19 +283,20 @@ const CategoryManagement = () => {
                 <tr key={category.category_id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     <div>
-                      <div className="font-medium">{category.name}</div>
-                      {category.name_amharic && (
-                        <div className="text-gray-500 text-xs mt-1">{category.name_amharic}</div>
-                      )}
+                      <div className="font-medium">{category.office_name || category.name}</div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    <div>
-                      <div>{category.description}</div>
-                      {category.description_amharic && (
-                        <div className="text-gray-400 text-xs mt-1">{category.description_amharic}</div>
-                      )}
-                    </div>
+                    {category.office_description || category.description || '-'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {category.campus_name || campuses.find(campus => campus.id === category.campus)?.campus_name || '-'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {category.college_name || colleges.find(college => college.id === category.college)?.college_name || '-'}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {category.department_name || departments.find(department => department.id === category.department)?.department_name || '-'}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {category.parent_name || '-'}
@@ -299,17 +332,18 @@ const CategoryManagement = () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}
-      <div className="bg-white px-6 py-3 border-t border-gray-200">
-        <div className="flex items-center justify-between">
+      <div className="bg-white px-4 sm:px-6 py-3 border-t border-gray-200">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-gray-700">
             Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
             {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
             {pagination.totalItems} results
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => handlePageChange(pagination.currentPage - 1)}
               disabled={pagination.currentPage === 1}
@@ -369,67 +403,93 @@ const CategoryManagement = () => {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title={editingCategory ? 'Edit Category' : 'Add Category'}
+        title={editingCategory ? 'Edit Office' : 'Add Office'}
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Name (English) *</label>
+            <label className="block text-sm font-medium text-gray-700">Office Name *</label>
             <input
               type="text"
               required
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              value={formData.office_name}
+              onChange={(e) => setFormData({...formData, office_name: e.target.value})}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-              placeholder="e.g., Academic Issues"
+              placeholder="e.g., Student Affairs Office"
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-700">Name (Amharic)</label>
-            <input
-              type="text"
-              value={formData.name_amharic}
-              onChange={(e) => setFormData({...formData, name_amharic: e.target.value})}
-              className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-              placeholder="e.g., የትምህርት ጉዳዮች"
-            />
-          </div>
-          
-          <div>
-            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Description (English)</label>
+            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Office Description</label>
             <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              value={formData.office_description}
+              onChange={(e) => setFormData({...formData, office_description: e.target.value})}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
               rows={3}
-              placeholder="Brief description of the category"
+              placeholder="Brief description of the office category"
             />
           </div>
-          
+
           <div>
-            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Description (Amharic)</label>
-            <textarea
-              value={formData.description_amharic}
-              onChange={(e) => setFormData({...formData, description_amharic: e.target.value})}
+            <label className="block text-sm font-medium text-gray-700">Campus</label>
+            <select
+              value={formData.campus}
+              onChange={(e) => setFormData({...formData, campus: e.target.value, college: '', department: ''})}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-              rows={3}
-              placeholder="የዘርፉ አጭር መግለጫ"
-            />
+            >
+              <option value="">Select Campus (Optional)</option>
+              {campuses.map((campus) => (
+                <option key={campus.id} value={campus.id}>
+                  {campus.campus_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">College</label>
+            <select
+              value={formData.college}
+              onChange={(e) => setFormData({...formData, college: e.target.value, department: ''})}
+              className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+            >
+              <option value="">Select College (Optional)</option>
+              {filteredColleges.map((college) => (
+                <option key={college.id} value={college.id}>
+                  {college.college_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Department</label>
+            <select
+              value={formData.department}
+              onChange={(e) => setFormData({...formData, department: e.target.value})}
+              className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+            >
+              <option value="">Select Department (Optional)</option>
+              {filteredDepartments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.department_name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Parent Category</label>
+            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Parent Office</label>
             <select
               value={formData.parent}
               onChange={(e) => setFormData({...formData, parent: e.target.value})}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
-              <option value="">No Parent (Top Level Category)</option>
+              <option value="">No Parent (Top Level Office)</option>
               {categories
                 .filter(cat => cat.category_id !== editingCategory?.category_id) // Don't allow self as parent
                 .map((category) => (
                 <option key={category.category_id} value={category.category_id}>
-                  {category.name}
+                  {category.office_name || category.name}
                 </option>
               ))}
             </select>
@@ -461,7 +521,7 @@ const CategoryManagement = () => {
               Active
             </label>
           </div>
-          <div className="flex justify-end space-x-3">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-3">
             <button
               type="button"
               onClick={() => setShowModal(false)}
@@ -489,7 +549,7 @@ const CategoryManagementWithAssignments = () => {
   const [activeSubTab, setActiveSubTab] = useState('categories');
 
   const subTabs = [
-    { id: 'categories', name: 'Categories', icon: '📂' },
+    { id: 'categories', name: 'Offices', icon: '📂' },
     { id: 'assignments', name: 'Assignments', icon: '👥' }
   ];
 

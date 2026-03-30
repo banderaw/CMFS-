@@ -30,7 +30,13 @@ class FeedbackTemplateViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return FeedbackTemplate.objects.none()
+
         user = self.request.user
+        if not user.is_authenticated:
+            return FeedbackTemplate.objects.none()
+
         # For now, allow all authenticated users to see templates for testing
         if user.is_admin():
             return FeedbackTemplate.objects.all()

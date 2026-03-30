@@ -44,21 +44,21 @@ const RegisterComplete = () => {
       localStorage.setItem('token', accessToken);
       localStorage.setItem('refresh', refreshToken);
     }
-    fetch(`${API}/accounts/campuses/`).then(r => r.json()).then(setCampuses).catch(() => {});
+    fetch(`${API}/campuses/`).then(r => r.json()).then(setCampuses).catch(() => {});
   }, [accessToken, refreshToken]);
 
   useEffect(() => {
     if (!formData.user_campus) { setColleges([]); setDepartments([]); return; }
     setFormData(prev => ({ ...prev, college: '', department: '' }));
     setDepartments([]);
-    fetch(`${API}/accounts/colleges/?campus=${formData.user_campus}`)
+    fetch(`${API}/colleges/?campus=${formData.user_campus}`)
       .then(r => r.json()).then(setColleges).catch(() => {});
   }, [formData.user_campus]);
 
   useEffect(() => {
     if (!formData.college) { setDepartments([]); return; }
     setFormData(prev => ({ ...prev, department: '' }));
-    fetch(`${API}/accounts/departments/?college=${formData.college}`)
+    fetch(`${API}/departments/?college=${formData.college}`)
       .then(r => r.json()).then(setDepartments).catch(() => {});
   }, [formData.college]);
 
@@ -119,8 +119,7 @@ const RegisterComplete = () => {
         setSuccess('Profile updated successfully! Redirecting...');
         setTimeout(() => {
           const role = userData.role;
-          if (role === 'super_admin') navigate('/super-admin');
-          else if (role === 'admin') navigate('/admin');
+          if (role === 'admin') navigate('/admin');
           else if (role === 'officer') navigate('/officer');
           else navigate('/user');
         }, 1500);

@@ -36,9 +36,7 @@ const AuthSuccess = () => {
 
           // Role-based redirection
           const role = userData.role;
-          if (role === 'super_admin') {
-            navigate('/super-admin');
-          } else if (role === 'admin') {
+          if (role === 'admin') {
             navigate('/admin');
           } else if (role === 'officer') {
             navigate('/officer');

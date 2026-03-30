@@ -3,11 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
-from django.contrib.auth.models import Group, Permission
-from django.urls import URLPattern, URLResolver, get_resolver
 from django.db.models import Q
 from datetime import timedelta
-from .models import User, PasswordResetToken, EmailVerificationToken, Campus, College, Department, Role, SystemLog
+from .models import User, PasswordResetToken, EmailVerificationToken, Campus, College, Department, SystemLog
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -15,39 +13,14 @@ from .serializers import (
     CampusSerializer,
     CollegeSerializer,
     DepartmentSerializer,
-    RoleSerializer,
-    GroupSerializer,
-    PermissionSerializer,
     SystemLogSerializer,
 )
 from .email_service import EmailService
 from .utils import generate_password_reset_token, generate_email_verification_token
 
 
-class IsSuperAdmin(permissions.BasePermission):
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and (user.is_superuser or getattr(user, 'role', None) == User.ROLE_SUPER_ADMIN)
-        )
-
-
-class IsAdminOrSuperAdmin(permissions.BasePermission):
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and (
-                user.is_superuser
-                or getattr(user, 'role', None) in [User.ROLE_ADMIN, User.ROLE_SUPER_ADMIN]
-            )
-        )
-
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.select_related('user_campus', 'college', 'department', 'role_ref').all()
+    queryset = User.objects.select_related('user_campus', 'college', 'department').all()
     serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]  # For development
 
@@ -254,131 +227,6 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    @action(detail=False, methods=["get"], url_path="roles", permission_classes=[permissions.IsAuthenticated])
-    def roles(self, request):
-        roles = Role.objects.filter(is_active=True).order_by('level', 'name')
-        return Response(RoleSerializer(roles, many=True).data, status=status.HTTP_200_OK)
-
-
-class RoleViewSet(viewsets.ModelViewSet):
-    queryset = Role.objects.prefetch_related('users').all()
-    serializer_class = RoleSerializer
-
-    def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
-            return [permissions.IsAuthenticated()]
-        return [IsSuperAdmin()]
-
-    def destroy(self, request, *args, **kwargs):
-        role = self.get_object()
-        if role.is_system:
-            return Response(
-                {'error': 'System roles cannot be deleted.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return super().destroy(request, *args, **kwargs)
-
-    @action(detail=True, methods=['post'], url_path='assign-user')
-    def assign_user(self, request, pk=None):
-        role = self.get_object()
-        user_id = request.data.get('user_id')
-
-        if not user_id:
-            return Response({'error': 'user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        user.role_ref = role
-        user.role = role.code
-        user.save()
-
-        return Response(
-            {
-                'message': f"Role '{role.name}' assigned to {user.email}.",
-                'user': UserSerializer(user, context={'request': request}).data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-class GroupViewSet(viewsets.ModelViewSet):
-    queryset = Group.objects.prefetch_related('permissions', 'custom_user_set').all().order_by('name')
-    serializer_class = GroupSerializer
-    permission_classes = [IsAdminOrSuperAdmin]
-
-
-class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = PermissionSerializer
-    permission_classes = [IsAdminOrSuperAdmin]
-
-    def get_queryset(self):
-        qs = Permission.objects.select_related('content_type').all().order_by('content_type__app_label', 'name')
-        app_label = self.request.query_params.get('app_label')
-        if app_label:
-            qs = qs.filter(content_type__app_label=app_label)
-        return qs
-
-    @action(detail=False, methods=['get'], url_path='endpoints')
-    def endpoints(self, request):
-        include_non_api = request.query_params.get('include_non_api', 'false').lower() == 'true'
-        resolver = get_resolver()
-        endpoints = []
-
-        def normalize_route(route):
-            clean_route = f"/{route}".replace('//', '/')
-            clean_route = clean_route.replace('^', '').replace('$', '')
-            return clean_route
-
-        def extract_methods(callback):
-            if hasattr(callback, 'actions') and isinstance(callback.actions, dict):
-                return sorted({method.upper() for method in callback.actions.keys()})
-
-            view_class = getattr(callback, 'view_class', None)
-            if view_class and hasattr(view_class, 'http_method_names'):
-                return sorted({m.upper() for m in view_class.http_method_names if m and m != 'options'})
-
-            return ['GET']
-
-        def walk(patterns, prefix=''):
-            for pattern in patterns:
-                if isinstance(pattern, URLResolver):
-                    walk(pattern.url_patterns, f"{prefix}{pattern.pattern}")
-                    continue
-
-                if not isinstance(pattern, URLPattern):
-                    continue
-
-                raw_route = f"{prefix}{pattern.pattern}"
-                route = normalize_route(str(raw_route))
-
-                if not include_non_api and not route.startswith('/api/'):
-                    continue
-
-                callback = pattern.callback
-                endpoints.append(
-                    {
-                        'path': route,
-                        'name': pattern.name,
-                        'methods': extract_methods(callback),
-                    }
-                )
-
-        walk(resolver.url_patterns)
-
-        # De-duplicate by path + methods
-        dedupe = {}
-        for item in endpoints:
-            key = f"{item['path']}|{','.join(item['methods'])}"
-            if key not in dedupe:
-                dedupe[key] = item
-
-        ordered = sorted(dedupe.values(), key=lambda x: x['path'])
-        return Response({'count': len(ordered), 'results': ordered}, status=status.HTTP_200_OK)
-
-
 class SystemViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
 
@@ -509,7 +357,7 @@ class TokenViewSet(viewsets.ViewSet):
 
 
 class CampusViewSet(viewsets.ModelViewSet):
-    queryset = Campus.objects.all()
+    queryset = Campus.objects.order_by('id')
     serializer_class = CampusSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -520,7 +368,7 @@ class CollegeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         campus_id = self.request.query_params.get('campus')
-        qs = College.objects.all()
+        qs = College.objects.order_by('id')
         if campus_id:
             qs = qs.filter(college_campus_id=campus_id)
         return qs
@@ -532,7 +380,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         college_id = self.request.query_params.get('college')
-        qs = Department.objects.all()
+        qs = Department.objects.order_by('id')
         if college_id:
             qs = qs.filter(department_college_id=college_id)
         return qs
