@@ -27,7 +27,7 @@ from .service import service
 
 
 class InstitutionViewSet(viewsets.ModelViewSet):
-    queryset = Institution.objects.all()
+    queryset = Institution.objects.order_by("name", "id")
     serializer_class = InstitutionSerializer
     permission_classes = [permissions.AllowAny]  # For development
 
@@ -70,7 +70,10 @@ class ResolverLevelViewSet(viewsets.ModelViewSet):
 
 
 class CategoryResolverViewSet(viewsets.ModelViewSet):
-    queryset = CategoryResolver.objects.all()
+    # Stable ordering is required for paginated responses.
+    queryset = CategoryResolver.objects.select_related("category", "level", "officer").order_by(
+        "category_id", "level__level_order", "officer_id", "id"
+    )
     serializer_class = CategoryResolverSerializer
     permission_classes = [permissions.AllowAny]  # For development
 

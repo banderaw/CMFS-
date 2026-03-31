@@ -18,6 +18,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 
+
+complaint_attachments/
 # Environment variables
 .env
 .env.local
