@@ -5,7 +5,19 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from django.db.models import Q
 from datetime import timedelta
-from .models import User, PasswordResetToken, EmailVerificationToken, Campus, College, Department, SystemLog
+from .models import (
+    Campus,
+    College,
+    Department,
+    EmailVerificationToken,
+    Officer,
+    PasswordResetToken,
+    Program,
+    Student,
+    StudentType,
+    SystemLog,
+    User,
+)
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -13,6 +25,10 @@ from .serializers import (
     CampusSerializer,
     CollegeSerializer,
     DepartmentSerializer,
+    ProgramSerializer,
+    StudentTypeSerializer,
+    StudentSerializer,
+    OfficerSerializer,
     SystemLogSerializer,
 )
 from .email_service import EmailService
@@ -20,7 +36,7 @@ from .utils import generate_password_reset_token, generate_email_verification_to
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.select_related('user_campus', 'college', 'department').all()
+    queryset = User.objects.select_related('student_profile', 'officer_profile').all()
     serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]  # For development
 
@@ -405,3 +421,47 @@ class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
     def clear(self, request):
         SystemLog.objects.all().delete()
         return Response({'message': 'Logs cleared.'})
+
+class ProgramViewSet(viewsets.ModelViewSet):
+    queryset = Program.objects.order_by('id')
+    serializer_class = ProgramSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class StudentTypeViewSet(viewsets.ModelViewSet):
+    queryset = StudentType.objects.order_by('id')
+    serializer_class = StudentTypeSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class StudentViewSet(viewsets.ModelViewSet):
+    serializer_class = StudentSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        qs = Student.objects.select_related('user', 'student_type', 'department', 'program').order_by('id')
+        student_type_id = self.request.query_params.get('student_type')
+        department_id = self.request.query_params.get('department')
+        program_id = self.request.query_params.get('program')
+        if student_type_id:
+            qs = qs.filter(student_type_id=student_type_id)
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+        if program_id:
+            qs = qs.filter(program_id=program_id)
+        return qs
+
+
+class OfficerViewSet(viewsets.ModelViewSet):
+    serializer_class = OfficerSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        qs = Officer.objects.select_related('user', 'college', 'department').order_by('id')
+        college_id = self.request.query_params.get('college')
+        department_id = self.request.query_params.get('department')
+        if college_id:
+            qs = qs.filter(college_id=college_id)
+        if department_id:
+            qs = qs.filter(department_id=department_id)
+        return qs

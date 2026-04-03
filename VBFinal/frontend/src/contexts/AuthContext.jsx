@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import authService from '../services/auth';
 import apiService from '../services/api';
 
@@ -16,11 +17,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    initializeAuth();
-  }, []);
-
-  const initializeAuth = async () => {
+  const initializeAuth = useCallback(async () => {
     const currentUser = authService.getCurrentUser();
     const token = authService.getToken();
 
@@ -42,7 +39,11 @@ export const AuthProvider = ({ children }) => {
       });
     }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
 
   const login = async (identifier, password) => {
     try {

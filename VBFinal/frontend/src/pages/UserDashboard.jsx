@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,72 +15,33 @@ import UserFeedback from '../components/User/UserFeedback';
 import Appointments from '../components/User/Appointments';
 
 const UserDashboard = () => {
-  const { isDark, toggleTheme } = useTheme();
-  const { language, t } = useLanguage();
-  const { user, logout } = useAuth();
+  const { isDark } = useTheme();
+  const { t } = useLanguage();
+  const { logout } = useAuth();
   const navigate = useNavigate();
+
   const [activeTab, setActiveTab] = useState('submit');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
-  const [complaints, setComplaints] = useState([]);
-  const [filteredComplaints, setFilteredComplaints] = useState([]);
   const [institutions, setInstitutions] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [filters, setFilters] = useState({
-    status: 'all',
-    category: 'all'
-  });
-  const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(3);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [complaints, filters]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const [complaintsData, institutionsData, categoriesData] = await Promise.all([
-        apiService.getComplaints(),
-        apiService.getInstitutions(),
-        apiService.getCategories()
-      ]);
-      
-      setComplaints(complaintsData.results || complaintsData);
-      setInstitutions(institutionsData.results || institutionsData);
-      setCategories(categoriesData.results || categoriesData);
-      
-      setNotifications([
-        { id: 1, type: 'success', message: t('complaint_assigned'), read: false },
-        { id: 2, type: 'info', message: t('status_updated'), read: false },
-        { id: 3, type: 'warning', message: t('new_comment'), read: true }
-      ]);
+      const institutionsData = await apiService.getInstitutions();
+      setInstitutions(institutionsData.results || institutionsData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const applyFilters = () => {
-    let filtered = complaints;
-    
-    if (filters.status !== 'all') {
-      filtered = filtered.filter(c => c.status === filters.status);
-    }
-    if (filters.category !== 'all') {
-      filtered = filtered.filter(c => c.category?.category_id === filters.category);
-    }
-    
-    setFilteredComplaints(filtered);
-  };
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -114,9 +75,7 @@ const UserDashboard = () => {
       case 'my-complaints':
         return (
           <div className="max-w-4xl mx-auto">
-            <MyComplaints 
-              getStatusBadge={getStatusBadge}
-            />
+            <MyComplaints getStatusBadge={getStatusBadge} />
           </div>
         );
       case 'feedback':
@@ -175,9 +134,8 @@ const UserDashboard = () => {
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <DashboardNavbar onSidebarToggle={handleSidebarToggle} />
-      
+
       <div className="flex pt-20">
-        {/* Sidebar */}
         <Sidebar
           isOpen={sidebarOpen}
           isCollapsed={isDesktopSidebarCollapsed}
@@ -198,7 +156,6 @@ const UserDashboard = () => {
           onHideSidebar={() => setIsDesktopSidebarCollapsed((prev) => !prev)}
         />
 
-        {/* Mobile Overlay */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 lg:hidden z-20 top-20"
@@ -206,7 +163,6 @@ const UserDashboard = () => {
           />
         )}
 
-        {/* Main Content */}
         <main className={`flex-1 ${isDesktopSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-72'} transition-all duration-300`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <MaintenanceNotification />

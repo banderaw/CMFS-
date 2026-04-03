@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const FeedbackForm = ({ templateId, onSubmit }) => {
   const [template, setTemplate] = useState(null);
@@ -6,11 +6,7 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchTemplate();
-  }, [templateId]);
-
-  const fetchTemplate = async () => {
+  const fetchTemplate = useCallback(async () => {
     try {
       const response = await fetch(`/api/feedback/templates/${templateId}/`, {
         headers: {
@@ -24,7 +20,11 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [templateId]);
+
+  useEffect(() => {
+    fetchTemplate();
+  }, [fetchTemplate]);
 
   const handleAnswerChange = (fieldId, value) => {
     setAnswers(prev => ({
@@ -102,7 +102,7 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
               {field.label}
               {field.is_required && <span className="text-red-600 ml-1">*</span>}
             </label>
-            
+
             <FieldInput
               field={field}
               value={answers[field.id]}
@@ -111,8 +111,8 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
           </div>
         ))}
 
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={submitting}
           className="w-full py-4 bg-blue-500 text-white text-lg font-semibold rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >

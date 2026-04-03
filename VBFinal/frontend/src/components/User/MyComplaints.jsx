@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
 
 const MyComplaints = ({ getStatusBadge }) => {
   const { isDark } = useTheme();
-  const { language, t } = useLanguage();
   const { user } = useAuth();
   const [complaints, setComplaints] = useState([]);
   const [filteredComplaints, setFilteredComplaints] = useState([]);
@@ -26,23 +24,7 @@ const MyComplaints = ({ getStatusBadge }) => {
   const [editingComment, setEditingComment] = useState(null);
   const [newComment, setNewComment] = useState('');
 
-  useEffect(() => {
-    loadComplaints();
-    loadCategories();
-    
-    // Set up periodic refresh to catch admin updates
-    const interval = setInterval(() => {
-      loadComplaints();
-    }, 30000); // Refresh every 30 seconds
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [complaints, filters]);
-
-  const loadComplaints = async () => {
+  const loadComplaints = useCallback(async () => {
     try {
       const data = await apiService.getComplaints();
       const userComplaints = (data.results || data).filter(
@@ -54,7 +36,18 @@ const MyComplaints = ({ getStatusBadge }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadComplaints();
+    loadCategories();
+
+    const interval = setInterval(() => {
+      loadComplaints();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [loadComplaints]);
 
   const loadCategories = async () => {
     try {
@@ -65,25 +58,29 @@ const MyComplaints = ({ getStatusBadge }) => {
     }
   };
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = complaints;
-    
+
     if (filters.status !== 'all') {
       filtered = filtered.filter(c => c.status === filters.status);
     }
     if (filters.category !== 'all') {
       filtered = filtered.filter(c => c.category?.category_id === filters.category);
     }
-    
+
     setFilteredComplaints(filtered);
-  };
+  }, [complaints, filters]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
 
   const getStats = () => {
     const total = complaints.length;
     const pending = complaints.filter(c => c.status === 'pending').length;
     const inProgress = complaints.filter(c => c.status === 'in_progress').length;
     const resolved = complaints.filter(c => c.status === 'resolved').length;
-    
+
     return { total, pending, inProgress, resolved };
   };
 
@@ -101,7 +98,7 @@ const MyComplaints = ({ getStatusBadge }) => {
     if (!confirm('Are you sure you want to delete this complaint? This action cannot be undone.')) {
       return;
     }
-    
+
     try {
       await apiService.deleteComplaint(complaintId);
       // Refresh complaints list
@@ -144,7 +141,7 @@ const MyComplaints = ({ getStatusBadge }) => {
 
   const deleteComment = async (commentId) => {
     if (!confirm('Are you sure you want to delete this comment?')) return;
-    
+
     try {
       await apiService.deleteComment(commentId);
       await loadComments(selectedComplaint.complaint_id);
@@ -159,7 +156,7 @@ const MyComplaints = ({ getStatusBadge }) => {
       alert('Please enter a comment.');
       return;
     }
-    
+
     try {
       await apiService.createComment({
         complaint: selectedComplaint.complaint_id,
@@ -179,7 +176,7 @@ const MyComplaints = ({ getStatusBadge }) => {
       alert('Please select a rating before submitting.');
       return;
     }
-    
+
     try {
       await apiService.addComplaintRating(selectedComplaint.complaint_id, rating, feedback);
       setShowRatingForm(false);
@@ -249,7 +246,7 @@ const MyComplaints = ({ getStatusBadge }) => {
             </label>
             <select
               value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               className={`w-full border rounded px-3 py-2 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
             >
               <option value="all">All Status</option>
@@ -265,7 +262,7 @@ const MyComplaints = ({ getStatusBadge }) => {
             </label>
             <select
               value={filters.category}
-              onChange={(e) => setFilters({...filters, category: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               className={`w-full border rounded px-3 py-2 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
             >
               <option value="all">All Categories</option>
@@ -286,8 +283,8 @@ const MyComplaints = ({ getStatusBadge }) => {
               No complaints found
             </h3>
             <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {complaints.length === 0 
-                ? "You haven't submitted any complaints yet." 
+              {complaints.length === 0
+                ? "You haven't submitted any complaints yet."
                 : "No complaints match your current filters."}
             </p>
           </div>
@@ -306,8 +303,8 @@ const MyComplaints = ({ getStatusBadge }) => {
                       </span>
                     </div>
                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-2`}>
-                      {complaint.description.length > 100 
-                        ? `${complaint.description.substring(0, 100)}...` 
+                      {complaint.description.length > 100
+                        ? `${complaint.description.substring(0, 100)}...`
                         : complaint.description}
                     </p>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
@@ -381,7 +378,7 @@ const MyComplaints = ({ getStatusBadge }) => {
                 <p className={`${isDark ? 'text-gray-300' : 'text-gray-700'} mb-4`}>
                   {selectedComplaint.description}
                 </p>
-                
+
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>ID:</span>
@@ -435,23 +432,21 @@ const MyComplaints = ({ getStatusBadge }) => {
                     </h4>
                     <div className="space-y-4">
                       {responses.map((response, index) => (
-                        <div key={index} className={`p-4 rounded-lg border-l-4 ${
-                          response.response_type === 'resolution' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
+                        <div key={index} className={`p-4 rounded-lg border-l-4 ${response.response_type === 'resolution' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
                           response.response_type === 'escalation' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
-                          response.response_type === 'initial' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' :
-                          'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
-                        }`}>
+                            response.response_type === 'initial' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' :
+                              'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                          }`}>
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <h5 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                 {response.title}
                               </h5>
-                              <span className={`text-xs px-2 py-1 rounded mt-1 inline-block ${
-                                response.response_type === 'resolution' ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
+                              <span className={`text-xs px-2 py-1 rounded mt-1 inline-block ${response.response_type === 'resolution' ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
                                 response.response_type === 'escalation' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
-                                response.response_type === 'initial' ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100' :
-                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
-                              }`}>
+                                  response.response_type === 'initial' ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100' :
+                                    'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+                                }`}>
                                 {response.response_type.replace('_', ' ').toUpperCase()}
                               </span>
                             </div>
@@ -519,13 +514,12 @@ const MyComplaints = ({ getStatusBadge }) => {
                               key={star}
                               onClick={() => setRating(star)}
                               onMouseEnter={() => setRating(star)}
-                              className={`text-3xl transition-all duration-200 hover:scale-110 ${
-                                star <= rating 
-                                  ? 'text-yellow-400 drop-shadow-lg' 
-                                  : isDark 
-                                    ? 'text-gray-600 hover:text-yellow-300' 
-                                    : 'text-gray-300 hover:text-yellow-400'
-                              }`}
+                              className={`text-3xl transition-all duration-200 hover:scale-110 ${star <= rating
+                                ? 'text-yellow-400 drop-shadow-lg'
+                                : isDark
+                                  ? 'text-gray-600 hover:text-yellow-300'
+                                  : 'text-gray-300 hover:text-yellow-400'
+                                }`}
                             >
                               ★
                             </button>
@@ -570,7 +564,7 @@ const MyComplaints = ({ getStatusBadge }) => {
                   <h4 className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-3`}>
                     Your Comments:
                   </h4>
-                  
+
                   {/* Add Comment */}
                   <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'} mb-4`}>
                     <textarea

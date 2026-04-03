@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 const STATUS_COLORS = {
-  pending:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
   confirmed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
   completed: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
@@ -16,17 +16,17 @@ const Appointments = () => {
   const [loading, setLoading] = useState(true);
 
   const token = localStorage.getItem('token');
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
 
   useEffect(() => {
     fetch('/api/appointments/', { headers })
       .then(r => r.json())
       .then(appts => {
-      setAppointments(appts.results ?? appts);
+        setAppointments(appts.results ?? appts);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoading(false));
-  }, []);
+  }, [headers]);
 
   const cardCls = `${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-sm p-5`;
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const MaintenanceContext = createContext();
@@ -22,7 +23,7 @@ export const MaintenanceProvider = ({ children }) => {
     const savedMessage = localStorage.getItem('maintenanceMessage');
     const savedScheduled = localStorage.getItem('scheduledMaintenance');
     const savedEndTime = localStorage.getItem('maintenanceEndTime');
-    
+
     if (savedMaintenanceMode === 'true') {
       setIsMaintenanceMode(true);
     }
@@ -57,13 +58,13 @@ export const MaintenanceProvider = ({ children }) => {
       setMaintenanceMessage(message);
       localStorage.setItem('maintenanceMessage', message);
     }
-    
+
     if (duration) {
       const endTime = new Date(Date.now() + duration * 60 * 1000).toISOString();
       setMaintenanceEndTime(endTime);
       localStorage.setItem('maintenanceEndTime', endTime);
     }
-    
+
     localStorage.setItem('maintenanceMode', 'true');
   };
 

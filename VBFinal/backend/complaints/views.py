@@ -7,9 +7,8 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.db import models
 
-from .models import Institution, Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment, PublicAnnouncement
+from .models import Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment, PublicAnnouncement
 from .serializers import (
-    InstitutionSerializer,
     CategorySerializer,
     ResolverLevelSerializer,
     CategoryResolverSerializer,
@@ -24,12 +23,6 @@ from .serializers import (
     AppointmentSerializer,
 )
 from .service import service
-
-
-class InstitutionViewSet(viewsets.ModelViewSet):
-    queryset = Institution.objects.order_by("name", "id")
-    serializer_class = InstitutionSerializer
-    permission_classes = [permissions.AllowAny]  # For development
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -175,15 +168,12 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         # Get or set a level - if no current level, get the first level or create one
         level = complaint.current_level
         if not level:
-            # Try to get the first level for the complaint's institution
-            level = ResolverLevel.objects.filter(
-                institution=complaint.institution
-            ).order_by('level_order').first()
+            # Get the first resolver level
+            level = ResolverLevel.objects.order_by('level_order').first()
             
             # If still no level exists, create a default one
             if not level:
                 level = ResolverLevel.objects.create(
-                    institution=complaint.institution,
                     name="Default Level",
                     level_order=1
                 )
@@ -225,10 +215,8 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             return DRFResponse({"error": "No current level set"}, status=status.HTTP_400_BAD_REQUEST)
         
         next_level = ResolverLevel.objects.filter(
-            institution=complaint.institution,
             level_order=complaint.current_level.level_order + 1
         ).first()
-        
         if not next_level:
             return DRFResponse({"error": "No higher level available"}, status=status.HTTP_400_BAD_REQUEST)
         

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
-import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { FeedbackFormBuilder, FeedbackAnalytics } from '../components/feedback';
@@ -14,8 +13,7 @@ import PublicAnnouncementBoard from '../components/Officer/PublicAnnouncementBoa
 import Modal from '../components/UI/Modal';
 
 const OfficerDashboard = () => {
-  const { isDark, toggleTheme } = useTheme();
-  const { language, t } = useLanguage();
+  const { isDark } = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -34,7 +32,6 @@ const OfficerDashboard = () => {
   const [responseText, setResponseText] = useState('');
   const [responses, setResponses] = useState([]);
   const [comments, setComments] = useState([]);
-  const [editingResponse, setEditingResponse] = useState(null);
   const [dashboardStats, setDashboardStats] = useState({
     assignedComplaints: 0,
     resolvedComplaints: 0,
@@ -69,9 +66,9 @@ const OfficerDashboard = () => {
       fetchDashboardStats();
       fetchTemplates();
     }
-  }, [activeTab, user?.id]);
+  }, [activeTab, user?.id, fetchComplaints, fetchDashboardStats]);
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
@@ -80,16 +77,16 @@ const OfficerDashboard = () => {
       const complaintsResponse = await fetch('/api/complaints/', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (complaintsResponse.ok) {
         const complaintsData = await complaintsResponse.json();
         const allComplaints = complaintsData.results || complaintsData;
-        
+
         // Calculate stats
         const assignedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id).length;
         const resolvedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'resolved').length;
         const pendingComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'pending').length;
-        
+
         setDashboardStats({
           assignedComplaints,
           resolvedComplaints,
@@ -100,7 +97,7 @@ const OfficerDashboard = () => {
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
     }
-  };
+  }, [user?.id, templates]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -142,7 +139,7 @@ const OfficerDashboard = () => {
 
 
 
-  const fetchComplaints = async () => {
+  const fetchComplaints = useCallback(async () => {
     setComplaintsLoading(true);
     try {
       const token = localStorage.getItem('token');
@@ -181,7 +178,7 @@ const OfficerDashboard = () => {
     } finally {
       setComplaintsLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const fetchCCComplaints = async () => {
     try {
@@ -300,7 +297,7 @@ const OfficerDashboard = () => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           complaint: selectedComplaint.complaint_id,
           title: 'Officer Response',
           message: responseText,
@@ -374,27 +371,6 @@ const OfficerDashboard = () => {
     }
   };
 
-  const handleEditResponse = async (responseId, newMessage) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/responses/${responseId}/`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: newMessage })
-      });
-      if (response.ok) {
-        setEditingResponse(null);
-        fetchResponses();
-        alert('Response updated successfully');
-      }
-    } catch (error) {
-      console.error('Error updating response:', error);
-    }
-  };
-
   const handleStatusChange = async (templateId, newStatus) => {
     const action = newStatus === 'active' ? 'activate' : 'deactivate';
     try {
@@ -405,7 +381,7 @@ const OfficerDashboard = () => {
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         fetchTemplates();
         alert(`Template ${action}d successfully!`);
@@ -422,7 +398,7 @@ const OfficerDashboard = () => {
 
   const handleDeleteTemplate = async (templateId) => {
     if (!confirm('Are you sure you want to delete this template?')) return;
-    
+
     try {
       await fetch(`/api/feedback/templates/${templateId}/`, {
         method: 'DELETE',
@@ -445,7 +421,7 @@ const OfficerDashboard = () => {
         }
       });
       const data = await response.json();
-      
+
       if (format === 'csv') {
         const csv = convertToCSV(data);
         downloadFile(csv, `feedback-${templateId}.csv`, 'text/csv');
@@ -466,7 +442,7 @@ const OfficerDashboard = () => {
       analytics.average || analytics.count || 0,
       JSON.stringify(analytics.choices || analytics)
     ]);
-    
+
     return [headers, ...rows].map(row => row.join(',')).join('\n');
   };
 
@@ -480,12 +456,7 @@ const OfficerDashboard = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const filteredTemplates = Array.isArray(templates) ? templates.filter(template => 
+  const filteredTemplates = Array.isArray(templates) ? templates.filter(template =>
     statusFilter === 'all' || template.status === statusFilter
   ).reverse() : [];
 
@@ -579,12 +550,11 @@ const OfficerDashboard = () => {
                             <h4 className="font-medium text-sm">{complaint.title}</h4>
                             <p className="text-xs text-gray-600">{complaint.category?.office_name || complaint.category?.name || 'Uncategorized'}</p>
                           </div>
-                          <span className={`px-2 py-1 text-xs rounded ${
-                            complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          <span className={`px-2 py-1 text-xs rounded ${complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                             complaint.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                            complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                              complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                                'bg-gray-100 text-gray-800'
+                            }`}>
                             {complaint.status}
                           </span>
                         </div>
@@ -597,7 +567,7 @@ const OfficerDashboard = () => {
                   </div>
                 )}
                 <div className="mt-4">
-                  <button 
+                  <button
                     onClick={() => setActiveTab('complaints')}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                   >
@@ -613,7 +583,7 @@ const OfficerDashboard = () => {
                 ) : !Array.isArray(templates) || templates.length === 0 ? (
                   <div className="text-center py-8 text-gray-600">
                     <p className="mb-4">No templates created yet</p>
-                    <button 
+                    <button
                       onClick={() => setActiveTab('create-template')}
                       className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
                     >
@@ -630,11 +600,10 @@ const OfficerDashboard = () => {
                             Created: {new Date(template.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          template.status === 'active' ? 'bg-green-100 text-green-800' :
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${template.status === 'active' ? 'bg-green-100 text-green-800' :
                           template.status === 'draft' ? 'bg-gray-100 text-gray-600' :
-                          'bg-red-100 text-red-800'
-                        }`}>
+                            'bg-red-100 text-red-800'
+                          }`}>
                           {template.status}
                         </span>
                       </div>
@@ -642,7 +611,7 @@ const OfficerDashboard = () => {
                   </div>
                 )}
                 <div className="mt-4">
-                  <button 
+                  <button
                     onClick={() => setActiveTab('manage-templates')}
                     className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
                   >
@@ -671,8 +640,8 @@ const OfficerDashboard = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Assigned Complaints ({complaints.length})</h3>
-                    <select 
-                      value={statusFilter} 
+                    <select
+                      value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-md"
                     >
@@ -683,7 +652,7 @@ const OfficerDashboard = () => {
                       <option value="resolved">Resolved</option>
                     </select>
                   </div>
-                  
+
                   <div className="space-y-3">
                     {complaints
                       .filter(complaint => statusFilter === 'all' || complaint.status === statusFilter)
@@ -691,19 +660,18 @@ const OfficerDashboard = () => {
                         <div key={complaint.complaint_id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
                           <div className="flex justify-between items-start mb-2">
                             <h4 className="font-semibold text-lg">{complaint.title}</h4>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                               complaint.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                              complaint.status === 'escalated' ? 'bg-red-100 text-red-800' :
-                              complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
+                                complaint.status === 'escalated' ? 'bg-red-100 text-red-800' :
+                                  complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                                    'bg-gray-100 text-gray-800'
+                              }`}>
                               {complaint.status.replace('_', ' ').toUpperCase()}
                             </span>
                           </div>
-                          
+
                           <p className="text-gray-600 mb-3">{complaint.description}</p>
-                          
+
                           <div className="flex justify-between items-center text-sm text-gray-500">
                             <div className="space-x-4">
                               <span>ID: {complaint.complaint_id.slice(0, 8)}...</span>
@@ -711,14 +679,14 @@ const OfficerDashboard = () => {
                             </div>
                             <span>Created: {new Date(complaint.created_at).toLocaleDateString()}</span>
                           </div>
-                          
+
                           <div className="mt-3 flex flex-wrap gap-2 items-center">
                             {getComplaintFiles(complaint).length > 0 && (
                               <span className="px-3 py-1 rounded-full text-xs bg-green-100 text-green-800 flex items-center gap-1">
                                 📎 {getComplaintFiles(complaint).length} file{getComplaintFiles(complaint).length > 1 ? 's' : ''}
                               </span>
                             )}
-                            <button 
+                            <button
                               onClick={() => {
                                 setSelectedComplaint(complaint);
                                 setNewStatus(complaint.status);
@@ -745,13 +713,13 @@ const OfficerDashboard = () => {
                       📋 CC'd Complaints ({ccComplaints.length})
                     </h3>
                   </div>
-                  
+
                   <div className="space-y-3">
                     {ccComplaints
                       .filter(complaint => statusFilter === 'all' || complaint.status === statusFilter)
                       .map(complaint => (
-                        <div 
-                          key={complaint.complaint_id} 
+                        <div
+                          key={complaint.complaint_id}
                           className={`border-l-4 border-purple-500 rounded-lg p-4 ${isDark ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-50'} transition-colors`}
                         >
                           <div className="flex justify-between items-start mb-2">
@@ -759,23 +727,22 @@ const OfficerDashboard = () => {
                               <span className="text-purple-600 text-lg">🔗</span>
                               <h4 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>{complaint.title}</h4>
                             </div>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                               complaint.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                              complaint.status === 'escalated' ? 'bg-red-100 text-red-800' :
-                              complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
+                                complaint.status === 'escalated' ? 'bg-red-100 text-red-800' :
+                                  complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                                    'bg-gray-100 text-gray-800'
+                              }`}>
                               {complaint.status.replace('_', ' ').toUpperCase()}
                             </span>
                           </div>
-                          
+
                           <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} mb-3`}>
-                            {complaint.description.length > 100 
-                              ? `${complaint.description.substring(0, 100)}...` 
+                            {complaint.description.length > 100
+                              ? `${complaint.description.substring(0, 100)}...`
                               : complaint.description}
                           </p>
-                          
+
                           <div className={`flex justify-between items-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             <div className="space-x-4">
                               <span>ID: {complaint.complaint_id.slice(0, 8)}</span>
@@ -783,14 +750,14 @@ const OfficerDashboard = () => {
                             </div>
                             <span>Created: {new Date(complaint.created_at).toLocaleDateString()}</span>
                           </div>
-                          
+
                           <div className="mt-3 flex flex-wrap gap-2 items-center">
                             {getComplaintFiles(complaint).length > 0 && (
                               <span className={`px-3 py-1 rounded-full text-xs flex items-center gap-1 ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800'}`}>
                                 📎 {getComplaintFiles(complaint).length} file{getComplaintFiles(complaint).length > 1 ? 's' : ''}
                               </span>
                             )}
-                            <button 
+                            <button
                               onClick={() => {
                                 setSelectedComplaint(complaint);
                                 setNewStatus(complaint.status);
@@ -815,7 +782,7 @@ const OfficerDashboard = () => {
         return (
           <div>
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Create New Feedback Template</h2>
-            
+
             {/* Only Feedback Template is supported */}
             <FeedbackFormBuilder onSave={() => {
               setActiveTab('manage-templates');
@@ -829,8 +796,8 @@ const OfficerDashboard = () => {
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Manage Templates</h2>
-              <select 
-                value={statusFilter} 
+              <select
+                value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg"
               >
@@ -849,11 +816,10 @@ const OfficerDashboard = () => {
                   <div key={template.id} className="bg-white rounded-lg shadow p-6 border border-gray-200">
                     <div className="flex justify-between items-start mb-4">
                       <h3 className="text-xl font-semibold text-gray-800">{template.title}</h3>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                        template.status === 'draft' ? 'bg-gray-100 text-gray-600' :
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${template.status === 'draft' ? 'bg-gray-100 text-gray-600' :
                         template.status === 'active' ? 'bg-green-100 text-green-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
+                          'bg-red-100 text-red-800'
+                        }`}>
                         {template.status}
                       </span>
                     </div>
@@ -868,7 +834,7 @@ const OfficerDashboard = () => {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      <button 
+                      <button
                         onClick={() => {
                           setSelectedTemplate(template.id);
                           setActiveTab('analytics');
@@ -879,7 +845,7 @@ const OfficerDashboard = () => {
                       </button>
 
                       {template.status === 'draft' && (
-                        <button 
+                        <button
                           onClick={() => handleStatusChange(template.id, 'active')}
                           className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
                         >
@@ -888,7 +854,7 @@ const OfficerDashboard = () => {
                       )}
 
                       {template.status === 'active' && (
-                        <button 
+                        <button
                           onClick={() => handleStatusChange(template.id, 'closed')}
                           className="px-3 py-2 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
                         >
@@ -896,14 +862,14 @@ const OfficerDashboard = () => {
                         </button>
                       )}
 
-                      <button 
+                      <button
                         onClick={() => exportResults(template.id, 'csv')}
                         className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                       >
                         Export CSV
                       </button>
 
-                      <button 
+                      <button
                         onClick={() => handleDeleteTemplate(template.id)}
                         className="px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
                       >
@@ -924,13 +890,13 @@ const OfficerDashboard = () => {
               <h2 className="text-2xl font-bold text-gray-800">Analytics</h2>
               {selectedTemplate && (
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={() => exportResults(selectedTemplate, 'csv')}
                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                   >
                     Export CSV
                   </button>
-                  <button 
+                  <button
                     onClick={() => exportResults(selectedTemplate, 'json')}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
@@ -939,13 +905,13 @@ const OfficerDashboard = () => {
                 </div>
               )}
             </div>
-            
+
             {selectedTemplate ? (
               <FeedbackAnalytics templateId={selectedTemplate} />
             ) : (
               <div className="text-center py-16 text-gray-600">
                 <p className="text-lg mb-4">Select a template to view analytics</p>
-                <button 
+                <button
                   onClick={() => setActiveTab('manage-templates')}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
@@ -981,7 +947,7 @@ const OfficerDashboard = () => {
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <DashboardNavbar onSidebarToggle={handleSidebarToggle} />
-      
+
       <div className="flex pt-20">
         {/* Sidebar */}
         <Sidebar
@@ -1089,9 +1055,8 @@ const OfficerDashboard = () => {
                               download={file.filename}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={`ml-2 flex-shrink-0 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                                isDark ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white'
-                              }`}
+                              className={`ml-2 flex-shrink-0 px-3 py-2 rounded text-sm font-medium transition-colors ${isDark ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white'
+                                }`}
                             >
                               View
                             </a>

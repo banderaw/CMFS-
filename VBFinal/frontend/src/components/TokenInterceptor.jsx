@@ -16,7 +16,7 @@ const TokenInterceptor = ({ children }) => {
           try {
             await refreshToken();
             console.log('Token refreshed successfully');
-          } catch (refreshError) {
+          } catch {
             console.log('Token refresh failed, logging out...');
             logout();
           }
@@ -26,7 +26,7 @@ const TokenInterceptor = ({ children }) => {
         // Try refresh as fallback
         try {
           await refreshToken();
-        } catch (refreshError) {
+        } catch {
           logout();
         }
       }

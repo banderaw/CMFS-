@@ -119,7 +119,6 @@ class College(models.Model):
     college_name   = models.CharField(max_length=100, null=True, blank=True)
     college_code   = models.CharField(max_length=20, null=True, blank=True)
     college_campus = models.ForeignKey(Campus, on_delete=models.CASCADE, null=True, blank=True, related_name='colleges')
-    dean           = models.CharField(max_length=150, blank=True, null=True)
     description    = models.TextField(blank=True, null=True)
     is_active      = models.BooleanField(default=True)
     created_at     = models.DateTimeField(default=timezone.now)
@@ -130,16 +129,23 @@ class College(models.Model):
 
 class Department(models.Model):
     department_name    = models.CharField(max_length=100, null=True, blank=True)
-    department_code    = models.CharField(max_length=20, null=True, blank=True)
     department_college = models.ForeignKey(College, on_delete=models.CASCADE, null=True, blank=True, related_name='departments')
-    head               = models.CharField(max_length=150, blank=True, null=True)
     description        = models.TextField(blank=True, null=True)
     is_active          = models.BooleanField(default=True)
     created_at         = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return self.department_name or ''
-        
+
+
+class Program(models.Model):
+    program_name       = models.CharField(max_length=100, null=True, blank=True)
+    description        = models.TextField(blank=True, null=True)
+    is_active          = models.BooleanField(default=True)
+    created_at         = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.program_name or ''
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_USER = 'user'  # Complainter
     ROLE_OFFICER = 'officer'  # Resolver
@@ -165,29 +171,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True, db_index=True)
     gmail_account = models.EmailField(unique=True, null=True, blank=True, db_index=True)
     username = models.CharField(max_length=150, unique=True, null=True, blank=True, db_index=True)
-    campus_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
-     
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
-    user_campus = models.ForeignKey(
-        Campus,
-        on_delete = models.CASCADE,
-        blank = True,
-        null = True
-    )
-    college = models.ForeignKey(
-        College,
-        on_delete=models.CASCADE,
-        null = True,
-        blank = True
-    )
-    department = models.ForeignKey(
-        Department,
-        on_delete = models.CASCADE,
-        null = True,
-        blank = True,
-        related_name = "department"
-    )
     phone = models.CharField(
         validators=[phone_regex],
         max_length=17,
@@ -263,7 +248,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         indexes = [
             models.Index(fields=['email']),
             models.Index(fields=['role']),
-            models.Index(fields=['campus_id']),
             models.Index(fields=['auth_provider']),
             models.Index(fields=['is_active', 'role']),
         ]
@@ -274,9 +258,25 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         if self.gmail_account and not self.gmail_account.lower().endswith('@gmail.com'):
             raise ValidationError("Gmail account must be a valid @gmail.com address")
-        
-        if self.role == self.ROLE_OFFICER and not self.college:
-            raise ValidationError("Officers must be assigned to a college")
+
+        if not self.pk:
+            return
+
+        student_profile_exists = Student.objects.filter(user_id=self.pk).exists()
+        officer_profile_exists = Officer.objects.filter(user_id=self.pk).exists()
+
+        if student_profile_exists and officer_profile_exists:
+            raise ValidationError("A user cannot have both student and officer profiles.")
+
+        if student_profile_exists and self.role != self.ROLE_USER:
+            raise ValidationError("Users with a student profile must have the student role.")
+
+        if officer_profile_exists and self.role != self.ROLE_OFFICER:
+            raise ValidationError("Users with an officer profile must have the officer role.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def save(self, *args, **kwargs):
         if self.gmail_account:
@@ -341,7 +341,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.role in [self.ROLE_OFFICER, self.ROLE_ADMIN]
 
     def mark_password_as_local_auth(self):
-        # Once password is set/reset, allow direct local login for social users too.
         if self.auth_provider in [self.AUTH_MICROSOFT, self.AUTH_GOOGLE]:
             self.auth_provider = self.AUTH_LOCAL
             self.save(update_fields=['auth_provider'])
@@ -360,6 +359,93 @@ class User(AbstractBaseUser, PermissionsMixin):
         else:
             return Complaint.objects.filter(submitted_by=self)
 
+class StudentType(models.Model):
+    type_name = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['type_name']
+        indexes = [models.Index(fields=['type_name'])]
+
+    def __str__(self):
+        return self.type_name
+
+class Student(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='student_profile'
+    )
+    student_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
+    student_type = models.ForeignKey(StudentType, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    campus_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    program = models.ForeignKey(Program, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    year_of_study = models.PositiveIntegerField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['user__first_name', 'user__last_name']
+        indexes = [
+            models.Index(fields=['student_id']),
+            models.Index(fields=['department']),
+            models.Index(fields=['program']),
+        ]
+
+    def clean(self):
+        if self.user and self.user.role != User.ROLE_USER:
+            raise ValidationError("Only users with the student role can have a student profile.")
+
+        if self.user_id:
+            existing_officer = Officer.objects.filter(user_id=self.user_id)
+            if self.pk:
+                existing_officer = existing_officer.exclude(user_id=self.user_id, pk=self.pk)
+            if existing_officer.exists():
+                raise ValidationError("This user already has an officer profile and cannot also be assigned a student profile.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.user.full_name} ({self.student_id})"
+
+class Officer(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='officer_profile'
+    )
+    employee_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
+    college = models.ForeignKey(College, on_delete=models.SET_NULL, null=True, blank=True, related_name='officers')
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='officers')
+    
+    class Meta:
+        ordering = ['user__first_name', 'user__last_name']
+        indexes = [
+            models.Index(fields=['employee_id']),
+            models.Index(fields=['college']),
+            models.Index(fields=['department']),
+        ]
+
+    def clean(self):
+        if self.user and self.user.role != User.ROLE_OFFICER:
+            raise ValidationError("Only users with the officer role can have an officer profile.")
+
+        if self.user_id:
+            existing_student = Student.objects.filter(user_id=self.user_id)
+            if self.pk:
+                existing_student = existing_student.exclude(user_id=self.user_id, pk=self.pk)
+            if existing_student.exists():
+                raise ValidationError("This user already has a student profile and cannot also be assigned an officer profile.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.user.full_name} ({self.employee_id})"
 class PasswordResetToken(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -5,7 +5,7 @@ import apiService from '../../services/api';
 
 const UserProfile = ({ user: propUser }) => {
   const { isDark } = useTheme();
-  const { user: authUser, login, setAuth } = useAuth();
+  const { user: authUser, setAuth } = useAuth();
   const user = propUser || authUser;
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -14,7 +14,7 @@ const UserProfile = ({ user: propUser }) => {
   const [campuses, setCampuses] = useState([]);
   const [colleges, setColleges] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [fetchingData, setFetchingData] = useState(true);
+  const [, setFetchingData] = useState(true);
 
   // Password change state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -528,11 +528,10 @@ const UserProfile = ({ user: propUser }) => {
                   value={formData.college || ''}
                   onChange={handleCollegeChange}
                   disabled={!formData.user_campus}
-                  className={`w-full px-3 py-2 border rounded-lg ${
-                    !formData.user_campus
+                  className={`w-full px-3 py-2 border rounded-lg ${!formData.user_campus
                       ? isDark ? 'bg-gray-600 border-gray-600 text-gray-400' : 'bg-gray-100 border-gray-300 text-gray-500'
                       : isDark ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' : 'bg-white border-gray-300 focus:border-blue-500'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
                 >
                   <option value="">Select College</option>
                   {colleges.map(college => (
@@ -560,11 +559,10 @@ const UserProfile = ({ user: propUser }) => {
                   value={formData.department || ''}
                   onChange={handleDepartmentChange}
                   disabled={!formData.college}
-                  className={`w-full px-3 py-2 border rounded-lg ${
-                    !formData.college
+                  className={`w-full px-3 py-2 border rounded-lg ${!formData.college
                       ? isDark ? 'bg-gray-600 border-gray-600 text-gray-400' : 'bg-gray-100 border-gray-300 text-gray-500'
                       : isDark ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' : 'bg-white border-gray-300 focus:border-blue-500'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
                 >
                   <option value="">Select Department</option>
                   {departments.map(dept => (

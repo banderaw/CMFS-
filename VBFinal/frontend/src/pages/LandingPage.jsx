@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
 import apiService from '../services/api';
 import PublicNavbar from '../components/UI/PublicNavbar';
 import PublicFooter from '../components/UI/PublicFooter';
@@ -27,7 +26,7 @@ const LandingPage = () => {
       try {
         const data = await apiService.getPublicAnnouncements();
         setAnnouncements(Array.isArray(data) ? data : data.results || []);
-      } catch (error) {
+      } catch {
         setAnnouncements([]);
       } finally {
         setAnnouncementsLoading(false);

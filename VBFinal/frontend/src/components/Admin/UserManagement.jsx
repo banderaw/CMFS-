@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import apiService from '../../services/api';
 import Modal from '../UI/Modal';
@@ -70,30 +70,10 @@ const UserManagement = () => {
         setColleges(collegesData.results ?? collegesData);
         setDepartments(departmentsData.results ?? departmentsData);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
-  useEffect(() => {
-    applyFilters();
-  }, [users, filters]);
-
-  useEffect(() => {
-    updatePagination();
-  }, [filteredUsers, pagination.currentPage, pagination.itemsPerPage]);
-
-  const loadUsers = async () => {
-    try {
-      const data = await apiService.getAllUsers();
-      const usersList = data.results || data;
-      setUsers(usersList);
-    } catch (error) {
-      console.error('Failed to load users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = users;
 
     if (filters.role !== 'all') {
@@ -118,12 +98,32 @@ const UserManagement = () => {
 
     setFilteredUsers(filtered);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
-  };
+  }, [users, filters]);
 
-  const updatePagination = () => {
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  const updatePagination = useCallback(() => {
     const totalItems = filteredUsers.length;
     const totalPages = Math.ceil(totalItems / pagination.itemsPerPage);
     setPagination(prev => ({ ...prev, totalItems, totalPages }));
+  }, [filteredUsers, pagination.itemsPerPage]);
+
+  useEffect(() => {
+    updatePagination();
+  }, [updatePagination]);
+
+  const loadUsers = async () => {
+    try {
+      const data = await apiService.getAllUsers();
+      const usersList = data.results || data;
+      setUsers(usersList);
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getPaginatedUsers = () => {

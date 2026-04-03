@@ -14,24 +14,15 @@ import ContactManagement from '../components/Admin/ContactManagement';
 import AdminProfile from '../components/Admin/AdminProfile';
 
 const AdminDashboard = ({ initialTab = 'overview' }) => {
-  const { isDark, toggleTheme } = useTheme();
-  const { user, logout } = useAuth();
+  const { isDark } = useTheme();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
-  const [institutions, setInstitutions] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    resolved: 0,
-    urgent: 0
-  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
     loadSystemStats();
   }, []);
 
@@ -75,23 +66,6 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
       });
     } catch (error) {
       console.error('Failed to load system stats:', error);
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [institutionsData, categoriesData, statsData] = await Promise.all([
-        apiService.getInstitutions(),
-        apiService.getCategories(),
-        apiService.getDashboardStats()
-      ]);
-      
-      setInstitutions(institutionsData);
-      setCategories(categoriesData);
-      setStats(statsData);
-    } catch (error) {
-      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
@@ -288,7 +262,7 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
       <DashboardNavbar onSidebarToggle={handleSidebarToggle} />
-      
+
       <div className="flex pt-20">
         {/* Sidebar */}
         <Sidebar

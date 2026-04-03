@@ -11,13 +11,7 @@ class ComplaintService:
             if not complaint.category:
                 return None
 
-            if complaint.institution:
-                first_level = ResolverLevel.objects.filter(
-                    institution=complaint.institution,
-                    level_order=1
-                ).first()
-            else:
-                first_level = ResolverLevel.objects.filter(level_order=1).first()
+            first_level = ResolverLevel.objects.filter(level_order=1).first()
 
             if not first_level:
                 return None
@@ -26,22 +20,28 @@ class ComplaintService:
                 category=complaint.category,
                 level=first_level,
                 active=True
-            ).first()
+            ).select_related('officer').order_by('id')
 
-            if category_resolver:
-                complaint.assigned_officer = category_resolver.officer
+            matched_resolver = None
+            for resolver in category_resolver:
+                if complaint.category.matches_officer(resolver.officer):
+                    matched_resolver = resolver
+                    break
+
+            if matched_resolver:
+                complaint.assigned_officer = matched_resolver.officer
                 complaint.current_level = first_level
                 complaint.set_escalation_deadline()
                 complaint.save()
 
                 Assignment.objects.create(
                     complaint=complaint,
-                    officer=category_resolver.officer,
+                    officer=matched_resolver.officer,
                     level=first_level,
                     reason='initial'
                 )
 
-                return category_resolver.officer
+                return matched_resolver.officer
 
             return None
         except Exception as e:

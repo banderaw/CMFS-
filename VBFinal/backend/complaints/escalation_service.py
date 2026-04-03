@@ -80,9 +80,6 @@ class EscalationService:
                 message=f"Your complaint {complaint.complaint_id} has been escalated to a higher level for faster resolution."
             )
             
-            # Notify institution admin
-            EscalationService._notify_institution_admin(complaint)
-            
         except Exception as e:
             print(f"Error sending escalation notifications for complaint {complaint.complaint_id}: {str(e)}")
     
@@ -90,7 +87,7 @@ class EscalationService:
     def notify_admin_max_escalation(complaint):
         """Notify admin when complaint reaches maximum escalation level"""
         try:
-            # Get institution admins
+            # Get active system admins
             admin_users = User.objects.filter(
                 role=User.ROLE_ADMIN,
                 is_active=True
@@ -122,32 +119,6 @@ This complaint has reached the maximum escalation level and requires administrat
                 )
         except Exception as e:
             print(f"Error notifying admin for max escalation: {str(e)}")
-    
-    @staticmethod
-    def _notify_institution_admin(complaint):
-        """Notify institution-specific admins about escalation"""
-        try:
-            if complaint.institution:
-                # This assumes there's a way to identify institution admins
-                # Modify based on your institution admin assignment logic
-                admin_users = User.objects.filter(
-                    role=User.ROLE_ADMIN,
-                    is_active=True
-                )
-                
-                for admin in admin_users:
-                    subject = f"Escalation Alert: {complaint.title}"
-                    message = f"Complaint {complaint.complaint_id} in {complaint.institution.name} has been escalated."
-                    
-                    EmailService.send_email(
-                        subject=subject,
-                        message=message,
-                        recipient_list=[admin.email],
-                        email_type='escalation_alert',
-                        recipient_user=admin
-                    )
-        except Exception as e:
-            print(f"Error notifying institution admin: {str(e)}")
     
     @staticmethod
     def _create_notification(user, complaint, notification_type, title, message):

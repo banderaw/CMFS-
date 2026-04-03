@@ -36,17 +36,14 @@ const SystemManagement = () => {
   });
   const [backupStatus, setBackupStatus] = useState('Last backup: Never');
   const [loading, setLoading] = useState(false);
-  const [backupHistory, setBackupHistory] = useState([]);
+  const [, setBackupHistory] = useState([]);
   const [restoreFile, setRestoreFile] = useState(null);
   const [backupProgress, setBackupProgress] = useState(0);
   const [restoreProgress, setRestoreProgress] = useState(0);
   const [systemLogs, setSystemLogs] = useState([]);
-  const [maintenanceMode, setMaintenanceMode] = useState(isMaintenanceMode);
   const [scheduledMaintenanceTime, setScheduledMaintenanceTime] = useState('');
   const [maintenanceMessage, setMaintenanceMessage] = useState('System is under maintenance. Please try again later.');
   const [maintenanceDuration, setMaintenanceDuration] = useState(30);
-  const [autoAssignment, setAutoAssignment] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
   const [jwtSessionTimeout, setJwtSessionTimeout] = useState(30);
   const [availableTimeouts, setAvailableTimeouts] = useState([15, 30, 60, 120, 240]);
   const [realTimeStats, setRealTimeStats] = useState({
@@ -83,18 +80,18 @@ const SystemManagement = () => {
   useEffect(() => {
     loadSystemStats();
     loadSystemLogs();
-    
+
     // Load real-time stats immediately and then every 9 seconds
     updateRealTimeStats();
     const interval = setInterval(updateRealTimeStats, 9000);
-    
+
     // Load system alerts less frequently
     loadSystemAlerts();
     const alertsInterval = setInterval(loadSystemAlerts, 90000);
-    
+
     // Load JWT configuration
     loadJwtConfig();
-    
+
     return () => {
       clearInterval(interval);
       clearInterval(alertsInterval);
@@ -106,7 +103,7 @@ const SystemManagement = () => {
     try {
       // Try to get real system stats from backend
       const response = await apiService.request('/system/stats/');
-      
+
       if (response && response.system) {
         const systemData = response.system;
         const newStats = {
@@ -117,11 +114,11 @@ const SystemManagement = () => {
           activeSessions: systemData.process_count || 0,
           responseTime: (Math.random() * 0.5) + 0.2  // 0.2 - 0.7 seconds
         };
-        
+
         setRealTimeStats(newStats);
         setStatsAvailable(true);
         setStatsError(null);
-        
+
         // Update system stats with real backend data
         setSystemStats(prev => ({
           ...prev,
@@ -132,11 +129,11 @@ const SystemManagement = () => {
           totalComplaints: response.django?.total_complaints || prev.totalComplaints,
           activeUsers: response.django?.active_users || prev.activeUsers
         }));
-        
+
         // Update history for charts (keep last 20 data points)
         const now = new Date();
         const timeString = now.toLocaleTimeString();
-        
+
         setStatsHistory(prev => {
           const newHistory = {
             cpu: [...prev.cpu.slice(-19), newStats.cpu],
@@ -216,10 +213,10 @@ const SystemManagement = () => {
         apiService.getComplaints(),
         apiService.getUsers?.() || Promise.resolve([])
       ]);
-      
+
       const complaints = complaintsData.results || complaintsData;
       const users = usersData.results || usersData;
-      
+
       setSystemStats(prev => ({
         ...prev,
         totalComplaints: complaints.length,
@@ -284,9 +281,9 @@ const SystemManagement = () => {
   const handleBackup = async (backupType = 'full') => {
     setLoading(true);
     setBackupProgress(0);
-    
+
     systemLogger.info(`Starting ${backupType} backup`, 'BACKUP');
-    
+
     try {
       // Simulate backup progress
       const progressInterval = setInterval(() => {
@@ -318,10 +315,10 @@ const SystemManagement = () => {
         },
         metadata: {
           version: '1.0',
-          totalRecords: (complaintsData.results || complaintsData).length + 
-                       (usersData.results || usersData).length + 
-                       (categoriesData.results || categoriesData).length + 
-                       (institutionsData.results || institutionsData).length
+          totalRecords: (complaintsData.results || complaintsData).length +
+            (usersData.results || usersData).length +
+            (categoriesData.results || categoriesData).length +
+            (institutionsData.results || institutionsData).length
         }
       };
 
@@ -349,10 +346,10 @@ const SystemManagement = () => {
         records: backupData.metadata.totalRecords,
         status: 'completed'
       };
-      
+
       setBackupHistory(prev => [newBackup, ...prev.slice(0, 9)]);
       setBackupStatus(`Last backup: ${new Date().toLocaleString()}`);
-      
+
       systemLogger.success(`${backupType.charAt(0).toUpperCase() + backupType.slice(1)} backup completed successfully (${newBackup.size}, ${newBackup.records} records)`, 'BACKUP');
       alert(`${backupType.charAt(0).toUpperCase() + backupType.slice(1)} backup completed successfully!`);
     } catch (error) {
@@ -398,7 +395,7 @@ const SystemManagement = () => {
       });
 
       const backupData = JSON.parse(fileContent);
-      
+
       // Validate backup format
       if (!backupData.data || !backupData.timestamp) {
         clearInterval(progressInterval);
@@ -412,13 +409,13 @@ const SystemManagement = () => {
       let skippedCount = 0;
       let errorCount = 0;
       const errors = [];
-      
+
       // Restore institutions first (categories depend on them)
       if (backupData.data.institutions && backupData.data.institutions.length > 0) {
         systemLogger.info(`Restoring ${backupData.data.institutions.length} institutions`, 'RESTORE');
         for (const institution of backupData.data.institutions) {
           try {
-            const { id, created_at, updated_at, ...institutionData } = institution;
+            const { id: _id, created_at: _createdAt, updated_at: _updatedAt, ...institutionData } = institution;
             await apiService.createInstitution(institutionData);
             restoredCount++;
           } catch (error) {
@@ -434,14 +431,22 @@ const SystemManagement = () => {
           }
         }
       }
-      
+
       // Restore categories
       if (backupData.data.categories && backupData.data.categories.length > 0) {
         systemLogger.info(`Restoring ${backupData.data.categories.length} categories`, 'RESTORE');
         for (const category of backupData.data.categories) {
           try {
-            const { category_id, id, created_at, updated_at, institution_name, parent_name, ...categoryData } = category;
-            
+            const {
+              category_id: _categoryId,
+              id: _id,
+              created_at: _createdAt,
+              updated_at: _updatedAt,
+              institution_name: _institutionName,
+              parent_name: _parentName,
+              ...categoryData
+            } = category;
+
             // Validate required fields
             if (!categoryData.name) {
               throw new Error('Category name is required');
@@ -449,7 +454,7 @@ const SystemManagement = () => {
             if (!categoryData.institution) {
               throw new Error('Institution is required');
             }
-            
+
             await apiService.createCategory(categoryData);
             restoredCount++;
           } catch (error) {
@@ -470,28 +475,28 @@ const SystemManagement = () => {
       setRestoreProgress(100);
 
       systemLogger.success(`Restore completed: ${restoredCount} restored, ${skippedCount} skipped, ${errorCount} errors`, 'RESTORE');
-      
+
       let message = `Restore completed!\n\n✓ Restored: ${restoredCount} records\n⊘ Skipped (duplicates): ${skippedCount}\n✗ Errors: ${errorCount}\n\nFrom backup: ${new Date(backupData.timestamp).toLocaleString()}`;
-      
+
       if (errors.length > 0) {
         message += `\n\nError details (check console for full details):\n${errors.slice(0, 3).join('\n')}`;
         if (errors.length > 3) {
           message += `\n... and ${errors.length - 3} more errors`;
         }
       }
-      
+
       message += '\n\nNote: Users and complaints were not restored for security reasons.';
-      
+
       alert(message);
-      
+
       // Reset file input
       setRestoreFile(null);
       const fileInput = document.getElementById('restore-file-input');
       if (fileInput) fileInput.value = '';
-      
+
       // Reload data to show restored items
       await loadSystemStats();
-      
+
     } catch (error) {
       systemLogger.error(`Restore failed: ${error.message}`, 'RESTORE');
       alert('Restore failed: ' + error.message);
@@ -516,7 +521,6 @@ const SystemManagement = () => {
     if (isMaintenanceMode) {
       if (confirm('Are you sure you want to disable maintenance mode? Users will be able to access the system.')) {
         disableMaintenanceMode();
-        setMaintenanceMode(false);
         // Clear scheduled maintenance notification
         localStorage.removeItem('scheduled_maintenance');
         systemLogger.info('Maintenance mode disabled by admin', 'MAINTENANCE');
@@ -525,7 +529,6 @@ const SystemManagement = () => {
     } else {
       if (confirm(`Are you sure you want to enable maintenance mode for ${maintenanceDuration} minutes? This will prevent non-admin users from accessing the system.`)) {
         enableMaintenanceMode(maintenanceMessage, maintenanceDuration);
-        setMaintenanceMode(true);
         systemLogger.warn(`Maintenance mode enabled by admin for ${maintenanceDuration} minutes`, 'MAINTENANCE');
         alert(`Maintenance mode enabled for ${maintenanceDuration} minutes. Only administrators can access the system.`);
       }
@@ -537,15 +540,15 @@ const SystemManagement = () => {
       alert('Please select a date and time for scheduled maintenance.');
       return;
     }
-    
+
     const scheduledTime = new Date(scheduledMaintenanceTime);
     const now = new Date();
-    
+
     if (scheduledTime <= now) {
       alert('Please select a future date and time.');
       return;
     }
-    
+
     // Save to localStorage for user notifications
     const maintenanceData = {
       scheduled_time: scheduledTime.toISOString(),
@@ -554,7 +557,7 @@ const SystemManagement = () => {
       scheduled_at: now.toISOString()
     };
     localStorage.setItem('scheduled_maintenance', JSON.stringify(maintenanceData));
-    
+
     scheduleMaintenanceMode(scheduledTime.toISOString(), `Scheduled maintenance at ${scheduledTime.toLocaleString()}`);
     alert(`Maintenance scheduled for ${scheduledTime.toLocaleString()}. Users will be notified.`);
     setScheduledMaintenanceTime('');
@@ -562,7 +565,7 @@ const SystemManagement = () => {
 
   const handleClearCache = async () => {
     if (!confirm('Are you sure you want to clear system cache?')) return;
-    
+
     setLoading(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -576,7 +579,7 @@ const SystemManagement = () => {
 
   const handleRestartServices = async () => {
     if (!confirm('Are you sure you want to restart system services? This may cause temporary downtime.')) return;
-    
+
     setLoading(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -609,7 +612,7 @@ const SystemManagement = () => {
             <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
               {systemStats.django.total_users || 0} total
             </div>
-            <button 
+            <button
               onClick={handleOpenActiveSessions}
               className={`mt-2 text-xs px-2 py-1 rounded ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'} transition-colors`}
             >
@@ -624,7 +627,7 @@ const SystemManagement = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Database Stats */}
         <div className="mt-6">
           <h4 className={`text-md font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
@@ -645,7 +648,7 @@ const SystemManagement = () => {
             </div>
           </div>
         </div>
-        
+
         {/* System Alerts */}
         {systemAlerts.length > 0 && (
           <div className="mt-6">
@@ -654,27 +657,24 @@ const SystemManagement = () => {
             </h4>
             <div className="space-y-2">
               {systemAlerts.slice(0, 5).map((alert, index) => (
-                <div key={index} className={`p-3 rounded-lg border-l-4 ${
-                  alert.type === 'critical' ? 'border-red-500 bg-red-50' :
+                <div key={index} className={`p-3 rounded-lg border-l-4 ${alert.type === 'critical' ? 'border-red-500 bg-red-50' :
                   alert.type === 'warning' ? 'border-yellow-500 bg-yellow-50' :
-                  'border-blue-500 bg-blue-50'
-                }`}>
+                    'border-blue-500 bg-blue-50'
+                  }`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <span className={`text-sm font-medium ${
-                        alert.type === 'critical' ? 'text-red-800' :
+                      <span className={`text-sm font-medium ${alert.type === 'critical' ? 'text-red-800' :
                         alert.type === 'warning' ? 'text-yellow-800' :
-                        'text-blue-800'
-                      }`}>
+                          'text-blue-800'
+                        }`}>
                         {alert.type.toUpperCase()}
                       </span>
                       <span className="text-sm text-gray-600">{alert.category}</span>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      alert.type === 'critical' ? 'bg-red-100 text-red-700' :
+                    <span className={`text-xs px-2 py-1 rounded ${alert.type === 'critical' ? 'bg-red-100 text-red-700' :
                       alert.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
+                        'bg-blue-100 text-blue-700'
+                      }`}>
                       Threshold: {alert.threshold}%
                     </span>
                   </div>
@@ -695,25 +695,23 @@ const SystemManagement = () => {
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
           Maintenance Mode Status
         </h3>
-        <div className={`p-4 rounded-lg border-2 ${
-          isMaintenanceMode 
-            ? isDark ? 'border-red-500 bg-red-900/20' : 'border-red-300 bg-red-50'
-            : isDark ? 'border-green-500 bg-green-900/20' : 'border-green-300 bg-green-50'
-        }`}>
+        <div className={`p-4 rounded-lg border-2 ${isMaintenanceMode
+          ? isDark ? 'border-red-500 bg-red-900/20' : 'border-red-300 bg-red-50'
+          : isDark ? 'border-green-500 bg-green-900/20' : 'border-green-300 bg-green-50'
+          }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className={`text-3xl ${isMaintenanceMode ? 'animate-pulse' : ''}`}>
                 {isMaintenanceMode ? '🚫' : '✅'}
               </div>
               <div>
-                <div className={`font-medium ${
-                  isMaintenanceMode ? 'text-red-600' : 'text-green-600'
-                }`}>
+                <div className={`font-medium ${isMaintenanceMode ? 'text-red-600' : 'text-green-600'
+                  }`}>
                   Maintenance Mode: {isMaintenanceMode ? 'ENABLED' : 'DISABLED'}
                 </div>
                 <div className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {isMaintenanceMode 
-                    ? 'Only administrators can access the system' 
+                  {isMaintenanceMode
+                    ? 'Only administrators can access the system'
                     : 'System is accessible to all users'
                   }
                 </div>
@@ -726,11 +724,10 @@ const SystemManagement = () => {
             </div>
             <button
               onClick={handleMaintenanceToggle}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                isMaintenanceMode
-                  ? 'bg-green-500 text-white hover:bg-green-600'
-                  : 'bg-red-500 text-white hover:bg-red-600'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${isMaintenanceMode
+                ? 'bg-green-500 text-white hover:bg-green-600'
+                : 'bg-red-500 text-white hover:bg-red-600'
+                }`}
             >
               {isMaintenanceMode ? 'Disable' : 'Enable'}
             </button>
@@ -831,9 +828,8 @@ const SystemManagement = () => {
           <button
             onClick={handleClearCache}
             disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-orange-300 rounded-lg hover:border-orange-500 transition-colors disabled:opacity-50 ${
-              isDark ? 'hover:bg-gray-700' : 'hover:bg-orange-50'
-            }`}
+            className={`flex flex-col items-center p-4 border-2 border-dashed border-orange-300 rounded-lg hover:border-orange-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-orange-50'
+              }`}
           >
             <div className="text-3xl mb-2">🧹</div>
             <div className="font-medium text-orange-600">Clear Cache</div>
@@ -843,9 +839,8 @@ const SystemManagement = () => {
           <button
             onClick={handleRestartServices}
             disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-red-300 rounded-lg hover:border-red-500 transition-colors disabled:opacity-50 ${
-              isDark ? 'hover:bg-gray-700' : 'hover:bg-red-50'
-            }`}
+            className={`flex flex-col items-center p-4 border-2 border-dashed border-red-300 rounded-lg hover:border-red-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-red-50'
+              }`}
           >
             <div className="text-3xl mb-2">🔄</div>
             <div className="font-medium text-red-600">Restart Services</div>
@@ -867,9 +862,8 @@ const SystemManagement = () => {
           <button
             onClick={() => handleBackup('full')}
             disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-blue-300 rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50 ${
-              isDark ? 'hover:bg-gray-700' : 'hover:bg-blue-50'
-            }`}
+            className={`flex flex-col items-center p-4 border-2 border-dashed border-blue-300 rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-blue-50'
+              }`}
           >
             <div className="text-3xl mb-2">💾</div>
             <div className="font-medium text-blue-600">Full Backup</div>
@@ -879,9 +873,8 @@ const SystemManagement = () => {
           <button
             onClick={() => handleBackup('data')}
             disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-green-300 rounded-lg hover:border-green-500 transition-colors disabled:opacity-50 ${
-              isDark ? 'hover:bg-gray-700' : 'hover:bg-green-50'
-            }`}
+            className={`flex flex-col items-center p-4 border-2 border-dashed border-green-300 rounded-lg hover:border-green-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-green-50'
+              }`}
           >
             <div className="text-3xl mb-2">📊</div>
             <div className="font-medium text-green-600">Data Only</div>
@@ -891,9 +884,8 @@ const SystemManagement = () => {
           <button
             onClick={() => handleBackup('config')}
             disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-purple-300 rounded-lg hover:border-purple-500 transition-colors disabled:opacity-50 ${
-              isDark ? 'hover:bg-gray-700' : 'hover:bg-purple-50'
-            }`}
+            className={`flex flex-col items-center p-4 border-2 border-dashed border-purple-300 rounded-lg hover:border-purple-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-purple-50'
+              }`}
           >
             <div className="text-3xl mb-2">⚙️</div>
             <div className="font-medium text-purple-600">Config Only</div>
@@ -909,9 +901,9 @@ const SystemManagement = () => {
               <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{backupProgress}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
+              <div
                 className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{width: `${backupProgress}%`}}
+                style={{ width: `${backupProgress}%` }}
               ></div>
             </div>
           </div>
@@ -977,9 +969,9 @@ const SystemManagement = () => {
                 <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{restoreProgress}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
+                <div
                   className="bg-orange-500 h-2 rounded-full transition-all duration-300"
-                  style={{width: `${restoreProgress}%`}}
+                  style={{ width: `${restoreProgress}%` }}
                 ></div>
               </div>
             </div>
@@ -1015,7 +1007,7 @@ const SystemManagement = () => {
             </button>
           </div>
         </div>
-        
+
         {/* Log Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
@@ -1044,20 +1036,18 @@ const SystemManagement = () => {
           ) : (
             <div className="space-y-1">
               {systemLogs.map((log, index) => (
-                <div key={log.id || index} className={`flex items-start space-x-3 py-1 ${
-                  log.level === 'ERROR' ? isDark ? 'text-red-400' : 'text-red-600' :
+                <div key={log.id || index} className={`flex items-start space-x-3 py-1 ${log.level === 'ERROR' ? isDark ? 'text-red-400' : 'text-red-600' :
                   log.level === 'WARN' ? isDark ? 'text-yellow-400' : 'text-yellow-600' :
-                  log.level === 'SUCCESS' ? isDark ? 'text-green-400' : 'text-green-600' :
-                  log.level === 'INFO' ? isDark ? 'text-blue-400' : 'text-blue-600' :
-                  isDark ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  <span className={`inline-block w-16 text-xs px-2 py-1 rounded ${
-                    log.level === 'ERROR' ? 'bg-red-100 text-red-800' :
-                    log.level === 'WARN' ? 'bg-yellow-100 text-yellow-800' :
-                    log.level === 'SUCCESS' ? 'bg-green-100 text-green-800' :
-                    log.level === 'INFO' ? 'bg-blue-100 text-blue-800' :
-                    'bg-gray-100 text-gray-800'
+                    log.level === 'SUCCESS' ? isDark ? 'text-green-400' : 'text-green-600' :
+                      log.level === 'INFO' ? isDark ? 'text-blue-400' : 'text-blue-600' :
+                        isDark ? 'text-gray-400' : 'text-gray-600'
                   }`}>
+                  <span className={`inline-block w-16 text-xs px-2 py-1 rounded ${log.level === 'ERROR' ? 'bg-red-100 text-red-800' :
+                    log.level === 'WARN' ? 'bg-yellow-100 text-yellow-800' :
+                      log.level === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+                        log.level === 'INFO' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                    }`}>
                     {log.level}
                   </span>
                   <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} w-32 flex-shrink-0`}>
@@ -1123,20 +1113,18 @@ const SystemManagement = () => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>CPU Usage</span>
-                  <span className={`font-mono ${
-                    realTimeStats.cpu > 80 ? 'text-red-500' : 
+                  <span className={`font-mono ${realTimeStats.cpu > 80 ? 'text-red-500' :
                     realTimeStats.cpu > 60 ? 'text-yellow-500' : 'text-green-500'
-                  }`}>
+                    }`}>
                     {realTimeStats.cpu.toFixed(1)}%
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                  <div 
-                    className={`h-3 rounded-full transition-all duration-500 ${
-                      realTimeStats.cpu > 80 ? 'bg-red-500' : 
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${realTimeStats.cpu > 80 ? 'bg-red-500' :
                       realTimeStats.cpu > 60 ? 'bg-yellow-500' : 'bg-green-500'
-                    }`}
-                    style={{width: `${realTimeStats.cpu}%`}}
+                      }`}
+                    style={{ width: `${realTimeStats.cpu}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-20 animate-pulse"></div>
                   </div>
@@ -1147,20 +1135,18 @@ const SystemManagement = () => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Memory Usage</span>
-                  <span className={`font-mono ${
-                    realTimeStats.memory > 80 ? 'text-red-500' : 
+                  <span className={`font-mono ${realTimeStats.memory > 80 ? 'text-red-500' :
                     realTimeStats.memory > 60 ? 'text-yellow-500' : 'text-blue-500'
-                  }`}>
+                    }`}>
                     {realTimeStats.memory.toFixed(1)}%
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                  <div 
-                    className={`h-3 rounded-full transition-all duration-500 ${
-                      realTimeStats.memory > 80 ? 'bg-red-500' : 
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${realTimeStats.memory > 80 ? 'bg-red-500' :
                       realTimeStats.memory > 60 ? 'bg-yellow-500' : 'bg-blue-500'
-                    }`}
-                    style={{width: `${realTimeStats.memory}%`}}
+                      }`}
+                    style={{ width: `${realTimeStats.memory}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-20 animate-pulse"></div>
                   </div>
@@ -1171,20 +1157,18 @@ const SystemManagement = () => {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Disk Usage</span>
-                  <span className={`font-mono ${
-                    realTimeStats.disk > 80 ? 'text-red-500' : 
+                  <span className={`font-mono ${realTimeStats.disk > 80 ? 'text-red-500' :
                     realTimeStats.disk > 60 ? 'text-yellow-500' : 'text-purple-500'
-                  }`}>
+                    }`}>
                     {realTimeStats.disk.toFixed(1)}%
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                  <div 
-                    className={`h-3 rounded-full transition-all duration-500 ${
-                      realTimeStats.disk > 80 ? 'bg-red-500' : 
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${realTimeStats.disk > 80 ? 'bg-red-500' :
                       realTimeStats.disk > 60 ? 'bg-yellow-500' : 'bg-purple-500'
-                    }`}
-                    style={{width: `${realTimeStats.disk}%`}}
+                      }`}
+                    style={{ width: `${realTimeStats.disk}%` }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-20 animate-pulse"></div>
                   </div>
@@ -1201,48 +1185,48 @@ const SystemManagement = () => {
                 {/* Grid lines */}
                 <defs>
                   <pattern id="grid" width="20" height="16" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 16" fill="none" stroke={isDark ? '#374151' : '#e5e7eb'} strokeWidth="0.5"/>
+                    <path d="M 20 0 L 0 0 0 16" fill="none" stroke={isDark ? '#374151' : '#e5e7eb'} strokeWidth="0.5" />
                   </pattern>
                 </defs>
                 <rect width="400" height="160" fill="url(#grid)" />
-                
+
                 {/* CPU Line */}
                 {statsHistory.cpu.length > 1 && (
                   <polyline
                     fill="none"
                     stroke="#10b981"
                     strokeWidth="2"
-                    points={statsHistory.cpu.map((value, index) => 
+                    points={statsHistory.cpu.map((value, index) =>
                       `${(index / (statsHistory.cpu.length - 1)) * 380 + 10},${160 - (value / 100) * 140 - 10}`
                     ).join(' ')}
                   />
                 )}
-                
+
                 {/* Memory Line */}
                 {statsHistory.memory.length > 1 && (
                   <polyline
                     fill="none"
                     stroke="#3b82f6"
                     strokeWidth="2"
-                    points={statsHistory.memory.map((value, index) => 
+                    points={statsHistory.memory.map((value, index) =>
                       `${(index / (statsHistory.memory.length - 1)) * 380 + 10},${160 - (value / 100) * 140 - 10}`
                     ).join(' ')}
                   />
                 )}
-                
+
                 {/* Disk Line */}
                 {statsHistory.disk.length > 1 && (
                   <polyline
                     fill="none"
                     stroke="#8b5cf6"
                     strokeWidth="2"
-                    points={statsHistory.disk.map((value, index) => 
+                    points={statsHistory.disk.map((value, index) =>
                       `${(index / (statsHistory.disk.length - 1)) * 380 + 10},${160 - (value / 100) * 140 - 10}`
                     ).join(' ')}
                   />
                 )}
               </svg>
-              
+
               {/* Legend */}
               <div className="absolute bottom-2 left-2 flex space-x-4 text-xs">
                 <div className="flex items-center space-x-1">
@@ -1272,7 +1256,7 @@ const SystemManagement = () => {
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
           Security & Configuration
         </h3>
-        
+
         {/* Security Section */}
         <div className="mb-8">
           <h4 className={`text-md font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
@@ -1284,7 +1268,7 @@ const SystemManagement = () => {
                 <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>JWT Session Timeout</div>
                 <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Token expiry time (affects all users)</div>
               </div>
-              <select 
+              <select
                 value={jwtSessionTimeout}
                 onChange={(e) => updateJwtTimeout(parseInt(e.target.value))}
                 className={`px-3 py-2 border rounded text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
@@ -1350,7 +1334,7 @@ const SystemManagement = () => {
   const renderMonitoring = () => (
     <div className="space-y-6">
       {/* Performance Overview */}
-      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>   
+      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
         {!statsAvailable && statsError ? (
           // No data available state
           <div className={`p-8 rounded-lg text-center ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
@@ -1374,31 +1358,29 @@ const SystemManagement = () => {
             {/* Real-time Gauges */}
             <div className="space-y-6">
               <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>System Resources</h4>
-            
 
 
 
 
-              
+
+
               {/* CPU Gauge */}
               <div className="relative">
                 <div className="flex justify-between items-center mb-2">
                   <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>CPU Usage</span>
-                  <span className={`text-lg font-bold ${
-                    realTimeStats.cpu > 80 ? 'text-red-500' : 
+                  <span className={`text-lg font-bold ${realTimeStats.cpu > 80 ? 'text-red-500' :
                     realTimeStats.cpu > 60 ? 'text-yellow-500' : 'text-green-500'
-                  }`}>
+                    }`}>
                     {realTimeStats.cpu.toFixed(1)}%
                   </span>
                 </div>
                 <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${
-                      realTimeStats.cpu > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' : 
-                      realTimeStats.cpu > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : 
-                      'bg-gradient-to-r from-green-400 to-green-600'
-                    }`}
-                    style={{width: `${realTimeStats.cpu}%`}}
+                  <div
+                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${realTimeStats.cpu > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' :
+                      realTimeStats.cpu > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                        'bg-gradient-to-r from-green-400 to-green-600'
+                      }`}
+                    style={{ width: `${realTimeStats.cpu}%` }}
                   >
                     <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
                   </div>
@@ -1409,21 +1391,19 @@ const SystemManagement = () => {
               <div className="relative">
                 <div className="flex justify-between items-center mb-2">
                   <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Memory Usage</span>
-                  <span className={`text-lg font-bold ${
-                    realTimeStats.memory > 80 ? 'text-red-500' : 
+                  <span className={`text-lg font-bold ${realTimeStats.memory > 80 ? 'text-red-500' :
                     realTimeStats.memory > 60 ? 'text-yellow-500' : 'text-blue-500'
-                  }`}>
+                    }`}>
                     {realTimeStats.memory.toFixed(1)}%
                   </span>
                 </div>
                 <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${
-                      realTimeStats.memory > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' : 
-                      realTimeStats.memory > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : 
-                      'bg-gradient-to-r from-blue-400 to-blue-600'
-                    }`}
-                    style={{width: `${realTimeStats.memory}%`}}
+                  <div
+                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${realTimeStats.memory > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' :
+                      realTimeStats.memory > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                        'bg-gradient-to-r from-blue-400 to-blue-600'
+                      }`}
+                    style={{ width: `${realTimeStats.memory}%` }}
                   >
                     <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
                   </div>
@@ -1434,21 +1414,19 @@ const SystemManagement = () => {
               <div className="relative">
                 <div className="flex justify-between items-center mb-2">
                   <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Disk Usage</span>
-                  <span className={`text-lg font-bold ${
-                    realTimeStats.disk > 80 ? 'text-red-500' : 
+                  <span className={`text-lg font-bold ${realTimeStats.disk > 80 ? 'text-red-500' :
                     realTimeStats.disk > 60 ? 'text-yellow-500' : 'text-purple-500'
-                  }`}>
+                    }`}>
                     {realTimeStats.disk.toFixed(1)}%
                   </span>
                 </div>
                 <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${
-                      realTimeStats.disk > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' : 
-                      realTimeStats.disk > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : 
-                      'bg-gradient-to-r from-purple-400 to-purple-600'
-                    }`}
-                    style={{width: `${realTimeStats.disk}%`}}
+                  <div
+                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${realTimeStats.disk > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' :
+                      realTimeStats.disk > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                        'bg-gradient-to-r from-purple-400 to-purple-600'
+                      }`}
+                    style={{ width: `${realTimeStats.disk}%` }}
                   >
                     <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
                   </div>
@@ -1459,7 +1437,7 @@ const SystemManagement = () => {
             {/* Live Stats Cards */}
             <div className="space-y-4">
               <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Live System Statistics</h4>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
                   <div className="text-2xl font-bold text-blue-500 animate-pulse">{realTimeStats.activeSessions}</div>
@@ -1468,7 +1446,7 @@ const SystemManagement = () => {
                     System Load
                   </div>
                 </div>
-                
+
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
                   <div className="text-2xl font-bold text-green-500">{realTimeStats.responseTime.toFixed(2)}s</div>
                   <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Response Time</div>
@@ -1476,7 +1454,7 @@ const SystemManagement = () => {
                     API Performance
                   </div>
                 </div>
-                
+
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
                   <div className="text-2xl font-bold text-orange-500">{realTimeStats.network.toFixed(1)}</div>
                   <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Network MB/s</div>
@@ -1484,7 +1462,7 @@ const SystemManagement = () => {
                     Data Transfer
                   </div>
                 </div>
-                
+
                 <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center cursor-pointer hover:shadow-lg transition-shadow`} onClick={handleOpenActiveSessions}>
                   <div className="text-2xl font-bold text-purple-500">{systemStats.django.active_users || 0}</div>
                   <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Users</div>
@@ -1507,6 +1485,10 @@ const SystemManagement = () => {
 
   const renderTabContent = () => {
     switch (activeSystemTab) {
+      case 'overview':
+        return renderSystemOverview();
+      case 'performance':
+        return renderPerformance();
       case 'maintenance':
         return renderMaintenance();
       case 'backup':
@@ -1532,11 +1514,10 @@ const SystemManagement = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveSystemTab(tab.id)}
-                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                  activeSystemTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'} hover:border-gray-300`
-                }`}
+                className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${activeSystemTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'} hover:border-gray-300`
+                  }`}
               >
                 <span>{tab.icon}</span>
                 <span>{tab.name}</span>
@@ -1653,11 +1634,10 @@ const SystemManagement = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              session.role === 'admin' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${session.role === 'admin' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
                               session.role === 'officer' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                              'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                            }`}>
+                                'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              }`}>
                               {session.role?.toUpperCase() || 'USER'}
                             </span>
                           </td>

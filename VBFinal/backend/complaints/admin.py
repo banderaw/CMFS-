@@ -1,10 +1,9 @@
 from django.contrib import admin
 from .models import (
-    Category, Complaint, Comment, Assignment ,Institution ,
+    Category, Complaint, Comment, Assignment,
     CategoryResolver,ResolverLevel,Response
 )
 
-admin.site.register(Institution)
 admin.site.register(ResolverLevel)
 admin.site.register(CategoryResolver)
 admin.site.register(Category)

@@ -8,6 +8,9 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 ALLOWED_HOSTS = [
+    "*",
+    "10.139.27.220",
+    "192.168.137.139",
     "localhost",
     "127.0.0.1",    
     "cmfs.onrender.com",
@@ -106,21 +109,21 @@ if not DATABASE_URL:
         'DATABASE_URL environment variable is required.'
     )
 
-DATABASES = {
-    'default': dj_database_url.parse(
-        DATABASE_URL,
-        conn_max_age=600,
-        ssl_require=True,
-    )
-}
-
-
 # DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3', # Path to the database file
-#     }
+#     'default': dj_database_url.parse(
+#         DATABASE_URL,
+#         conn_max_age=600,
+#         ssl_require=True,
+#     )
 # }
+
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3', # Path to the database file
+    }
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {

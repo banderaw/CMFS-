@@ -63,7 +63,7 @@ const Login = () => {
       }
 
       // Perform actual login through AuthContext
-      const response = await login(formData.identifier.trim(), formData.password);
+      await login(formData.identifier.trim(), formData.password);
       const roleRoute = authService.getRoleBasedRoute();
       navigate(roleRoute);
     } catch (error) {

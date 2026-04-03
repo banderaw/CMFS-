@@ -111,7 +111,7 @@ class AuthService {
       });
 
       return response.ok;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

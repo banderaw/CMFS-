@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
@@ -10,16 +10,7 @@ const Notifications = ({ setUnreadCount }) => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => {
-    loadNotifications();
-  }, []);
-
-  useEffect(() => {
-    const unreadCount = notifications.filter(n => !n.read).length;
-    setUnreadCount(unreadCount);
-  }, [notifications, setUnreadCount]);
-
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
@@ -33,18 +24,17 @@ const Notifications = ({ setUnreadCount }) => {
         complaint => complaint.submitted_by?.id === user?.id
       );
 
-      // Build appointment notifications from real data
       const appts = (apptsRes.results ?? apptsRes);
       const apptNotifications = Array.isArray(appts)
-        ? appts.map((appt, idx) => ({
-            id: `appt-${appt.id}`,
-            type: 'appointment',
-            title: appt.status === 'confirmed' ? '📅 Appointment Confirmed' : appt.status === 'cancelled' ? '❌ Appointment Cancelled' : '📅 Appointment Scheduled',
-            message: `An appointment has been ${appt.status} for your complaint "${appt.complaint_title}". Scheduled: ${new Date(appt.scheduled_at).toLocaleString()}${appt.location ? ` at ${appt.location}` : ''}.`,
-            complaint_id: appt.complaint,
-            read: appt.status === 'completed',
-            created_at: appt.created_at || new Date().toISOString(),
-          }))
+        ? appts.map((appt) => ({
+          id: `appt-${appt.id}`,
+          type: 'appointment',
+          title: appt.status === 'confirmed' ? '📅 Appointment Confirmed' : appt.status === 'cancelled' ? '❌ Appointment Cancelled' : '📅 Appointment Scheduled',
+          message: `An appointment has been ${appt.status} for your complaint "${appt.complaint_title}". Scheduled: ${new Date(appt.scheduled_at).toLocaleString()}${appt.location ? ` at ${appt.location}` : ''}.`,
+          complaint_id: appt.complaint,
+          read: appt.status === 'completed',
+          created_at: appt.created_at || new Date().toISOString(),
+        }))
         : [];
 
       const staticNotifications = [
@@ -93,24 +83,33 @@ const Notifications = ({ setUnreadCount }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    const unreadCount = notifications.filter(n => !n.read).length;
+    setUnreadCount(unreadCount);
+  }, [notifications, setUnreadCount]);
 
   const markAsRead = (notificationId) => {
-    setNotifications(prev => 
-      prev.map(n => 
+    setNotifications(prev =>
+      prev.map(n =>
         n.id === notificationId ? { ...n, read: true } : n
       )
     );
   };
 
   const markAllAsRead = () => {
-    setNotifications(prev => 
+    setNotifications(prev =>
       prev.map(n => ({ ...n, read: true }))
     );
   };
 
   const deleteNotification = (notificationId) => {
-    setNotifications(prev => 
+    setNotifications(prev =>
       prev.filter(n => n.id !== notificationId)
     );
   };
@@ -151,7 +150,7 @@ const Notifications = ({ setUnreadCount }) => {
     const now = new Date();
     const date = new Date(dateString);
     const diffInMinutes = Math.floor((now - date) / (1000 * 60));
-    
+
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
@@ -188,13 +187,12 @@ const Notifications = ({ setUnreadCount }) => {
             <button
               key={filterType}
               onClick={() => setFilter(filterType)}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                filter === filterType
+              className={`px-3 py-1 rounded text-sm transition-colors ${filter === filterType
                   ? 'bg-blue-500 text-white'
                   : isDark
                     ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               {filterType.charAt(0).toUpperCase() + filterType.slice(1)}
               {filterType === 'unread' && (
@@ -215,7 +213,7 @@ const Notifications = ({ setUnreadCount }) => {
               No notifications
             </h3>
             <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {filter === 'unread' 
+              {filter === 'unread'
                 ? "You're all caught up! No unread notifications."
                 : filter === 'read'
                   ? "No read notifications to show."
@@ -225,13 +223,12 @@ const Notifications = ({ setUnreadCount }) => {
         ) : (
           <div className="divide-y divide-gray-200">
             {filteredNotifications.map((notification) => (
-              <div 
-                key={notification.id} 
-                className={`p-4 transition-colors ${
-                  !notification.read 
+              <div
+                key={notification.id}
+                className={`p-4 transition-colors ${!notification.read
                     ? isDark ? 'bg-gray-750 hover:bg-gray-700' : 'bg-blue-50 hover:bg-blue-100'
                     : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 flex-1">

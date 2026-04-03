@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useLanguage } from '../../contexts/LanguageContext';
 import apiService from '../../services/api';
 import Modal from '../UI/Modal';
 
 export const CategoryManagement = () => {
   const { isDark } = useTheme();
-  const { language, t } = useLanguage();
   const [categories, setCategories] = useState([]);
   const [filteredCategories, setFilteredCategories] = useState([]);
   const [institutions, setInstitutions] = useState([]);
@@ -38,26 +36,18 @@ export const CategoryManagement = () => {
     is_active: true
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [pagination.currentPage, pagination.itemsPerPage]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [categories, filters]);
-
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...categories];
-    
+
     // Apply search filter
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase();
-      filtered = filtered.filter(category => 
+      filtered = filtered.filter(category =>
         (category.office_name || category.name || '').toLowerCase().includes(searchTerm) ||
         ((category.office_description || category.description || '').toLowerCase().includes(searchTerm))
       );
     }
-    
+
     // Apply status filter
     if (filters.status !== 'all') {
       filtered = filtered.filter(category => {
@@ -66,18 +56,22 @@ export const CategoryManagement = () => {
         return true;
       });
     }
-    
+
     // Apply institution filter
     if (filters.institution !== 'all') {
-      filtered = filtered.filter(category => 
+      filtered = filtered.filter(category =>
         category.institution === parseInt(filters.institution)
       );
     }
-    
-    setFilteredCategories(filtered);
-  };
 
-  const fetchData = async () => {
+    setFilteredCategories(filtered);
+  }, [categories, filters]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [categoriesResponse, institutionsData, campusesData, collegesData, departmentsData] = await Promise.all([
@@ -87,7 +81,7 @@ export const CategoryManagement = () => {
         apiService.getColleges(),
         apiService.getDepartments()
       ]);
-      
+
       // Handle paginated response
       if (categoriesResponse.results) {
         setCategories(categoriesResponse.results);
@@ -99,7 +93,7 @@ export const CategoryManagement = () => {
       } else {
         setCategories(categoriesResponse);
       }
-      
+
       setInstitutions(institutionsData.results || institutionsData);
       setCampuses(campusesData.results || campusesData);
       setColleges(collegesData.results || collegesData);
@@ -109,7 +103,11 @@ export const CategoryManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.currentPage]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handlePageChange = (page) => {
     setPagination(prev => ({ ...prev, currentPage: page }));
@@ -132,8 +130,8 @@ export const CategoryManagement = () => {
       } else {
         await apiService.createCategory(payload);
       }
-      
-      fetchData();
+
+      await fetchData();
       setShowModal(false);
       setEditingCategory(null);
       setFormData({ office_name: '', office_description: '', institution: '', campus: '', college: '', department: '', parent: '', is_active: true });
@@ -161,7 +159,7 @@ export const CategoryManagement = () => {
     if (confirm('Are you sure you want to delete this office?')) {
       try {
         await apiService.deleteCategory(categoryId);
-        fetchData();
+        await fetchData();
       } catch (error) {
         console.error('Error deleting category:', error);
       }
@@ -205,7 +203,7 @@ export const CategoryManagement = () => {
               type="text"
               placeholder="Search offices..."
               value={filters.search}
-              onChange={(e) => setFilters({...filters, search: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             />
           </div>
@@ -213,7 +211,7 @@ export const CategoryManagement = () => {
             <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Status</label>
             <select
               value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="all">All Status</option>
@@ -225,7 +223,7 @@ export const CategoryManagement = () => {
             <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Institution</label>
             <select
               value={filters.institution}
-              onChange={(e) => setFilters({...filters, institution: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, institution: e.target.value })}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="all">All Institutions</option>
@@ -236,7 +234,7 @@ export const CategoryManagement = () => {
           </div>
           <div className="flex items-end">
             <button
-              onClick={() => setFilters({status: 'all', institution: 'all', search: ''})}
+              onClick={() => setFilters({ status: 'all', institution: 'all', search: '' })}
               className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
             >
               Clear Filters
@@ -248,90 +246,89 @@ export const CategoryManagement = () => {
       {/* Results Counter */}
       <div className="text-sm text-gray-600">
         Showing {filteredCategories.length} of {pagination.totalItems} offices
-        {(filters.search || filters.status !== 'all' || filters.institution !== 'all') && 
+        {(filters.search || filters.status !== 'all' || filters.institution !== 'all') &&
           ` (filtered from ${categories.length} on this page)`
         }
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="min-w-[980px] w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Office Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campus</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">College</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Institution</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredCategories.length === 0 ? (
+          <table className="min-w-[980px] w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
-                  {filters.search || filters.status !== 'all' || filters.institution !== 'all' 
-                    ? 'No offices match the current filters.' 
-                    : 'No offices found. Click "Add Office" to create one.'}
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Office Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campus</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">College</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Institution</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
-            ) : (
-              filteredCategories.map((category) => (
-                <tr key={category.category_id}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <div>
-                      <div className="font-medium">{category.office_name || category.name}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {category.office_description || category.description || '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {category.campus_name || campuses.find(campus => campus.id === category.campus)?.campus_name || '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {category.college_name || colleges.find(college => college.id === category.college)?.college_name || '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {category.department_name || departments.find(department => department.id === category.department)?.department_name || '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {category.parent_name || '-'}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {institutions.find(inst => inst.id === category.institution)?.name || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      category.is_active 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {category.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => handleEdit(category)}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(category.category_id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete
-                    </button>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredCategories.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
+                    {filters.search || filters.status !== 'all' || filters.institution !== 'all'
+                      ? 'No offices match the current filters.'
+                      : 'No offices found. Click "Add Office" to create one.'}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                filteredCategories.map((category) => (
+                  <tr key={category.category_id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <div>
+                        <div className="font-medium">{category.office_name || category.name}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {category.office_description || category.description || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {category.campus_name || campuses.find(campus => campus.id === category.campus)?.campus_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {category.college_name || colleges.find(college => college.id === category.college)?.college_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {category.department_name || departments.find(department => department.id === category.department)?.department_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {category.parent_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {institutions.find(inst => inst.id === category.institution)?.name || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${category.is_active
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                        }`}>
+                        {category.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleEdit(category)}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(category.category_id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -347,15 +344,14 @@ export const CategoryManagement = () => {
             <button
               onClick={() => handlePageChange(pagination.currentPage - 1)}
               disabled={pagination.currentPage === 1}
-              className={`px-3 py-1 rounded text-sm ${
-                pagination.currentPage === 1
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-500 text-white hover:bg-blue-600'
-              }`}
+              className={`px-3 py-1 rounded text-sm ${pagination.currentPage === 1
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+                }`}
             >
               Previous
             </button>
-            
+
             {[...Array(pagination.totalPages)].map((_, index) => {
               const page = index + 1;
               if (
@@ -367,11 +363,10 @@ export const CategoryManagement = () => {
                   <button
                     key={page}
                     onClick={() => handlePageChange(page)}
-                    className={`px-3 py-1 rounded text-sm ${
-                      page === pagination.currentPage
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`px-3 py-1 rounded text-sm ${page === pagination.currentPage
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
                   >
                     {page}
                   </button>
@@ -388,11 +383,10 @@ export const CategoryManagement = () => {
             <button
               onClick={() => handlePageChange(pagination.currentPage + 1)}
               disabled={pagination.currentPage === pagination.totalPages}
-              className={`px-3 py-1 rounded text-sm ${
-                pagination.currentPage === pagination.totalPages
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-500 text-white hover:bg-blue-600'
-              }`}
+              className={`px-3 py-1 rounded text-sm ${pagination.currentPage === pagination.totalPages
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+                }`}
             >
               Next
             </button>
@@ -413,7 +407,7 @@ export const CategoryManagement = () => {
               type="text"
               required
               value={formData.office_name}
-              onChange={(e) => setFormData({...formData, office_name: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, office_name: e.target.value })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
               placeholder="e.g., Student Affairs Office"
             />
@@ -423,7 +417,7 @@ export const CategoryManagement = () => {
             <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Office Description</label>
             <textarea
               value={formData.office_description}
-              onChange={(e) => setFormData({...formData, office_description: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, office_description: e.target.value })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
               rows={3}
               placeholder="Brief description of the office category"
@@ -434,7 +428,7 @@ export const CategoryManagement = () => {
             <label className="block text-sm font-medium text-gray-700">Campus</label>
             <select
               value={formData.campus}
-              onChange={(e) => setFormData({...formData, campus: e.target.value, college: '', department: ''})}
+              onChange={(e) => setFormData({ ...formData, campus: e.target.value, college: '', department: '' })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="">Select Campus (Optional)</option>
@@ -450,7 +444,7 @@ export const CategoryManagement = () => {
             <label className="block text-sm font-medium text-gray-700">College</label>
             <select
               value={formData.college}
-              onChange={(e) => setFormData({...formData, college: e.target.value, department: ''})}
+              onChange={(e) => setFormData({ ...formData, college: e.target.value, department: '' })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="">Select College (Optional)</option>
@@ -466,7 +460,7 @@ export const CategoryManagement = () => {
             <label className="block text-sm font-medium text-gray-700">Department</label>
             <select
               value={formData.department}
-              onChange={(e) => setFormData({...formData, department: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="">Select Department (Optional)</option>
@@ -481,24 +475,24 @@ export const CategoryManagement = () => {
             <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Parent Office</label>
             <select
               value={formData.parent}
-              onChange={(e) => setFormData({...formData, parent: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, parent: e.target.value })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="">No Parent (Top Level Office)</option>
               {categories
                 .filter(cat => cat.category_id !== editingCategory?.category_id) // Don't allow self as parent
                 .map((category) => (
-                <option key={category.category_id} value={category.category_id}>
-                  {category.office_name || category.name}
-                </option>
-              ))}
+                  <option key={category.category_id} value={category.category_id}>
+                    {category.office_name || category.name}
+                  </option>
+                ))}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Institution</label>
             <select
               value={formData.institution}
-              onChange={(e) => setFormData({...formData, institution: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
               className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
             >
               <option value="">Select Institution (Optional)</option>
@@ -514,7 +508,7 @@ export const CategoryManagement = () => {
               type="checkbox"
               id="is_active"
               checked={formData.is_active}
-              onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700">

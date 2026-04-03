@@ -26,7 +26,7 @@ const FeedbackFormBuilder = ({ onSave }) => {
   };
 
   const updateField = (fieldId, updates) => {
-    setFields(fields.map(field => 
+    setFields(fields.map(field =>
       field.id === fieldId ? { ...field, ...updates } : field
     ));
   };
@@ -45,12 +45,12 @@ const FeedbackFormBuilder = ({ onSave }) => {
     const newFields = [...fields];
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     [newFields[currentIndex], newFields[targetIndex]] = [newFields[targetIndex], newFields[currentIndex]];
-    
+
     const updatedFields = newFields.map((field, index) => ({
       ...field,
       order: index
     }));
-    
+
     setFields(updatedFields);
   };
 
@@ -63,11 +63,11 @@ const FeedbackFormBuilder = ({ onSave }) => {
     const templateData = {
       title: formTitle,
       description: formDescription,
-      fields: fields.map(({ id, ...field }) => field)
+      fields: fields.map(({ id: _id, ...field }) => field)
     };
 
     try {
-      
+
       const response = await fetch('/api/feedback/templates/', {
         method: 'POST',
         headers: {
@@ -85,7 +85,7 @@ const FeedbackFormBuilder = ({ onSave }) => {
         // Handle different response types
         const contentType = response.headers.get('content-type');
         let errorMessage = 'Failed to create form';
-        
+
         try {
           if (contentType && contentType.includes('application/json')) {
             const error = await response.json();
@@ -99,7 +99,7 @@ const FeedbackFormBuilder = ({ onSave }) => {
           console.error('Error parsing response:', parseError);
           errorMessage = `Server error (${response.status}): ${response.statusText}`;
         }
-        
+
         alert(errorMessage);
       }
     } catch (error) {
@@ -168,8 +168,8 @@ const FeedbackFormBuilder = ({ onSave }) => {
       </div>
 
       <div className="mt-8 text-center">
-        <button 
-          onClick={handleSave} 
+        <button
+          onClick={handleSave}
           className="bg-green-500 text-white px-8 py-4 text-lg font-semibold rounded-lg hover:bg-green-600 transition-colors"
         >
           Save Feedback Form
@@ -243,7 +243,7 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
                 onChange={(e) => updateOption(index, e.target.value)}
                 className="flex-1 p-1 border border-gray-300 rounded"
               />
-              <button 
+              <button
                 onClick={() => removeOption(index)}
                 className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
               >
@@ -251,7 +251,7 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
               </button>
             </div>
           ))}
-          <button 
+          <button
             onClick={addOption}
             className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
           >

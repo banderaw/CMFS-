@@ -333,29 +333,36 @@ class ApiService {
     return this.request('/contact/', { method: 'POST', body: JSON.stringify(data) });
   }
 
-  // Institutions
+  // Backward-compatible shim for removed institution endpoints.
+  // The backend no longer exposes /institutions/, so aggregate office units.
   async getInstitutions() {
-    return this.request('/institutions/');
+    const [campusesRes, collegesRes, departmentsRes] = await Promise.all([
+      this.getCampuses(),
+      this.getColleges(),
+      this.getDepartments(),
+    ]);
+
+    const campuses = campusesRes.results || campusesRes || [];
+    const colleges = collegesRes.results || collegesRes || [];
+    const departments = departmentsRes.results || departmentsRes || [];
+
+    return [
+      ...campuses.map((item) => ({ ...item, entity_type: 'campus' })),
+      ...colleges.map((item) => ({ ...item, entity_type: 'college' })),
+      ...departments.map((item) => ({ ...item, entity_type: 'department' })),
+    ];
   }
 
-  async createInstitution(data) {
-    return this.request('/institutions/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+  async createInstitution() {
+    throw new Error('Institutions were removed from backend. Create campus, college, or department instead.');
   }
 
-  async updateInstitution(id, data) {
-    return this.request(`/institutions/${id}/`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
+  async updateInstitution() {
+    throw new Error('Institutions were removed from backend. Update campus, college, or department instead.');
   }
 
-  async deleteInstitution(id) {
-    return this.request(`/institutions/${id}/`, {
-      method: 'DELETE',
-    });
+  async deleteInstitution() {
+    throw new Error('Institutions were removed from backend. Delete campus, college, or department instead.');
   }
 
   // Colleges

@@ -1,33 +1,34 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 import uuid
 
-class Institution(models.Model):
-    name = models.CharField(max_length=255)
-    domain = models.CharField(max_length=255, unique=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.name
-
 class Category(models.Model):
+    SCOPE_GENERAL = "general"
+    SCOPE_CAMPUS = "campus"
+    SCOPE_COLLEGE = "college"
+    SCOPE_DEPARTMENT = "department"
+    SCOPE_CHOICES = [
+        (SCOPE_GENERAL, "General"),
+        (SCOPE_CAMPUS, "Campus"),
+        (SCOPE_COLLEGE, "College"),
+        (SCOPE_DEPARTMENT, "Department"),
+    ]
+
     category_id = models.CharField(
         max_length=30,
         primary_key=True,
         editable=False
     )
-    institution = models.ForeignKey(
-        Institution,
-        on_delete=models.CASCADE,
-        related_name="categories",
-        null=True,
-        blank=True,
-        default=None
-    )
 
     office_name = models.CharField(max_length=150)
     office_description = models.TextField(blank=True)
+    office_scope = models.CharField(
+        max_length=20,
+        choices=SCOPE_CHOICES,
+        default=SCOPE_GENERAL,
+    )
 
     campus = models.ForeignKey(
         "accounts.Campus",
@@ -64,11 +65,54 @@ class Category(models.Model):
 
     class Meta:
         ordering = ["office_name"]
-        unique_together = ("institution", "office_name")
+        unique_together = ("office_name", "office_scope", "campus", "college", "department")
+
+    def clean(self):
+        if self.office_scope == self.SCOPE_GENERAL:
+            return
+
+        if self.office_scope == self.SCOPE_CAMPUS and not self.campus_id:
+            raise ValidationError("Campus office categories must specify a campus.")
+
+        if self.office_scope == self.SCOPE_COLLEGE and not self.college_id:
+            raise ValidationError("College office categories must specify a college.")
+
+        if self.office_scope == self.SCOPE_DEPARTMENT and not self.department_id:
+            raise ValidationError("Department office categories must specify a department.")
+
+        if self.department_id and self.college_id:
+            if self.department.department_college_id != self.college_id:
+                raise ValidationError("Selected department does not belong to the selected college.")
+
+        if self.college_id and self.campus_id:
+            if self.college.college_campus_id != self.campus_id:
+                raise ValidationError("Selected college does not belong to the selected campus.")
+
+    def matches_scope(self, campus=None, college=None, department=None):
+        if self.office_scope == self.SCOPE_GENERAL:
+            return True
+        if self.office_scope == self.SCOPE_CAMPUS:
+            return bool(campus and self.campus_id == campus.id)
+        if self.office_scope == self.SCOPE_COLLEGE:
+            return bool(college and self.college_id == college.id)
+        if self.office_scope == self.SCOPE_DEPARTMENT:
+            return bool(department and self.department_id == department.id)
+        return False
+
+    def matches_officer(self, officer_user):
+        profile = getattr(officer_user, "officer_profile", None)
+        if profile is None:
+            return False
+
+        department = profile.department
+        college = profile.college or (department.department_college if department else None)
+        campus = college.college_campus if college else None
+        return self.matches_scope(campus=campus, college=college, department=department)
 
     def save(self, *args, **kwargs):
         if not self.category_id:
             self.category_id = f"CAT-{uuid.uuid4().hex[:10].upper()}"
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -77,23 +121,17 @@ class Category(models.Model):
 
 
 class ResolverLevel(models.Model):
-    institution = models.ForeignKey(
-        Institution,
-        on_delete=models.CASCADE,
-        related_name="resolver_levels"
-    )
     name = models.CharField(max_length=100)  # e.g. Department, Dean, President
-    level_order = models.PositiveIntegerField()  # 1, 2, 3...
+    level_order = models.PositiveIntegerField(unique=True)  # 1, 2, 3...
     escalation_time = models.DurationField(
         help_text="Time before escalation (e.g. 48 hours)"
     )
 
     class Meta:
         ordering = ["level_order"]
-        unique_together = ("institution", "level_order")
 
     def __str__(self):
-        return f"{self.institution.name} - {self.name} (L{self.level_order})"
+        return f"{self.name} (L{self.level_order})"
 
 
 
@@ -140,13 +178,6 @@ class Complaint(models.Model):
         editable=False
     )
 
-    institution = models.ForeignKey(
-        Institution,
-        on_delete=models.CASCADE,
-        related_name="complaints",
-        null=True,
-        blank=True
-    )
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -159,6 +190,28 @@ class Complaint(models.Model):
         null=True,
         blank=True,
         related_name="complaints"
+    )
+
+    submitter_campus = models.ForeignKey(
+        "accounts.Campus",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submitted_complaints",
+    )
+    submitter_college = models.ForeignKey(
+        "accounts.College",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submitted_complaints",
+    )
+    submitter_department = models.ForeignKey(
+        "accounts.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submitted_complaints",
     )
 
     title = models.CharField(max_length=255)
@@ -199,6 +252,45 @@ class Complaint(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    def _get_submitter_scope(self):
+        student_profile = getattr(self.submitted_by, "student_profile", None)
+        if student_profile is not None:
+            department = student_profile.department
+            college = department.department_college if department else None
+            campus = college.college_campus if college else None
+            return campus, college, department
+
+        officer_profile = getattr(self.submitted_by, "officer_profile", None)
+        if officer_profile is not None:
+            department = officer_profile.department
+            college = officer_profile.college or (department.department_college if department else None)
+            campus = college.college_campus if college else None
+            return campus, college, department
+
+        return None, None, None
+
+    def _sync_submitter_scope_snapshot(self):
+        campus, college, department = self._get_submitter_scope()
+        self.submitter_campus = campus
+        self.submitter_college = college
+        self.submitter_department = department
+
+    def clean(self):
+        if self.submitted_by_id:
+            self._sync_submitter_scope_snapshot()
+
+        if self.category:
+            if not self.category.matches_scope(
+                campus=self.submitter_campus,
+                college=self.submitter_college,
+                department=self.submitter_department,
+            ):
+                raise ValidationError("Selected office category does not match the complainant's campus/college/department.")
+
+        if self.assigned_officer_id and self.category:
+            if not self.category.matches_officer(self.assigned_officer):
+                raise ValidationError("Assigned officer does not match the complaint office scope.")
+
     def __str__(self):
         return f"{self.complaint_id}  {self.title}  ({self.status})"
 
@@ -209,6 +301,7 @@ class Complaint(models.Model):
     def save(self, *args, **kwargs):
         if self.current_level and not self.escalation_deadline:
             self.set_escalation_deadline()
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def escalate_to_next_level(self):
@@ -218,7 +311,6 @@ class Complaint(models.Model):
         
         # Find the next level for this category
         next_level = ResolverLevel.objects.filter(
-            institution=self.current_level.institution,
             level_order__gt=self.current_level.level_order
         ).order_by('level_order').first()
         

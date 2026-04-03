@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
 
 const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
   const { isDark } = useTheme();
   const { language, t } = useLanguage();
-  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [complaintForm, setComplaintForm] = useState({
@@ -21,11 +19,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
   const [officers, setOfficers] = useState([]);
   const [ccOfficerIds, setCcOfficerIds] = useState([]);
 
-  useEffect(() => {
-    loadCategories();
-  }, [language]);
-
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       const response = await apiService.getCategoriesByLanguage(language);
       setCategories(response || []);
@@ -36,7 +30,11 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
     } catch (error) {
       console.error('Failed to load categories:', error);
     }
-  };
+  }, [language]);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   const validateForm = () => {
     const errors = {};

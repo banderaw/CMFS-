@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 const STATUS_COLORS = {
-  pending:   'bg-yellow-100 text-yellow-800',
+  pending: 'bg-yellow-100 text-yellow-800',
   confirmed: 'bg-green-100 text-green-800',
   cancelled: 'bg-red-100 text-red-800',
   completed: 'bg-gray-100 text-gray-700',
@@ -22,7 +22,7 @@ const OfficerSchedule = () => {
   const [updatingId, setUpdatingId] = useState(null);
 
   const token = localStorage.getItem('token');
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
 
   useEffect(() => {
     Promise.all([
@@ -38,8 +38,8 @@ const OfficerSchedule = () => {
           ? allComps.filter(c => c.assigned_officer?.id === user?.id && c.status !== 'closed')
           : []
       );
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    }).catch(() => { }).finally(() => setLoading(false));
+  }, [headers, user?.id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,9 +87,8 @@ const OfficerSchedule = () => {
   };
 
   const cardCls = `${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-sm p-5`;
-  const inputCls = `mt-1 block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-    isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'
-  }`;
+  const inputCls = `mt-1 block w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'
+    }`;
 
   if (loading) return (
     <div className="flex justify-center py-16">

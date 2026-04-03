@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useAuth } from '../../contexts/AuthContext';
 import apiService from '../../services/api';
 
 const AdminComplaints = () => {
   const { isDark } = useTheme();
-  const { user } = useAuth();
   const [complaints, setComplaints] = useState([]);
   const [filteredComplaints, setFilteredComplaints] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -35,9 +33,25 @@ const AdminComplaints = () => {
     loadData();
   }, []);
 
+  const applyFilters = useCallback(() => {
+    let filtered = complaints;
+
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(c => c.status === filters.status);
+    }
+    if (filters.category !== 'all') {
+      filtered = filtered.filter(c => c.category?.category_id === filters.category);
+    }
+    if (filters.institution !== 'all') {
+      filtered = filtered.filter(c => c.institution === parseInt(filters.institution));
+    }
+
+    setFilteredComplaints(filtered);
+  }, [complaints, filters]);
+
   useEffect(() => {
     applyFilters();
-  }, [complaints, filters]);
+  }, [applyFilters]);
 
   const loadData = async () => {
     try {
@@ -47,9 +61,9 @@ const AdminComplaints = () => {
         apiService.getInstitutions(),
         apiService.getAllUsers()
       ]);
-      
+
       setComplaints(complaintsData.results || complaintsData);
-      
+
       // Handle paginated categories - load all pages
       let allCategories = [];
       if (categoriesData.results) {
@@ -70,15 +84,15 @@ const AdminComplaints = () => {
       } else {
         allCategories = categoriesData;
       }
-      
+
       setCategories(allCategories);
       setInstitutions(institutionsData.results || institutionsData);
-      
+
       // Filter officers (users with officer role)
       const allUsers = officersData.results || officersData;
       const officerUsers = allUsers.filter(user => user.role === 'officer' || user.is_staff);
       setOfficers(officerUsers);
-      
+
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -86,27 +100,11 @@ const AdminComplaints = () => {
     }
   };
 
-  const applyFilters = () => {
-    let filtered = complaints;
-    
-    if (filters.status !== 'all') {
-      filtered = filtered.filter(c => c.status === filters.status);
-    }
-    if (filters.category !== 'all') {
-      filtered = filtered.filter(c => c.category?.category_id === filters.category);
-    }
-    if (filters.institution !== 'all') {
-      filtered = filtered.filter(c => c.institution === parseInt(filters.institution));
-    }
-    
-    setFilteredComplaints(filtered);
-  };
-
   const updateComplaintStatus = async (complaintId, newStatus) => {
     try {
       await apiService.updateComplaint(complaintId, { status: newStatus });
-      setComplaints(prev => 
-        prev.map(c => 
+      setComplaints(prev =>
+        prev.map(c =>
           c.complaint_id === complaintId ? { ...c, status: newStatus } : c
         )
       );
@@ -128,25 +126,25 @@ const AdminComplaints = () => {
         // Assign category
         await apiService.updateComplaint(complaintId, { category: categoryId });
       }
-      
+
       // Update the selected complaint in modal if it's the same complaint
       if (selectedComplaint?.complaint_id === complaintId) {
         const updatedCategory = categoryId ? categories.find(cat => cat.category_id === categoryId) : null;
         setSelectedComplaint(prev => ({ ...prev, category: updatedCategory }));
       }
-      
+
       // Update the complaint in the main list
-      setComplaints(prevComplaints => 
-        prevComplaints.map(complaint => 
-          complaint.complaint_id === complaintId 
-            ? { 
-                ...complaint, 
-                category: categoryId ? categories.find(cat => cat.category_id === categoryId) : null 
-              }
+      setComplaints(prevComplaints =>
+        prevComplaints.map(complaint =>
+          complaint.complaint_id === complaintId
+            ? {
+              ...complaint,
+              category: categoryId ? categories.find(cat => cat.category_id === categoryId) : null
+            }
             : complaint
         )
       );
-      
+
     } catch (error) {
       console.error('Failed to assign category:', error);
       alert('Failed to assign category');
@@ -162,25 +160,25 @@ const AdminComplaints = () => {
         // Assign officer
         await apiService.updateComplaint(complaintId, { assigned_to: officerId });
       }
-      
+
       // Update the selected complaint in modal if it's the same complaint
       if (selectedComplaint?.complaint_id === complaintId) {
         const updatedOfficer = officerId ? officers.find(off => off.id === parseInt(officerId)) : null;
         setSelectedComplaint(prev => ({ ...prev, assigned_to: updatedOfficer }));
       }
-      
+
       // Update the complaint in the main list
-      setComplaints(prevComplaints => 
-        prevComplaints.map(complaint => 
-          complaint.complaint_id === complaintId 
-            ? { 
-                ...complaint, 
-                assigned_to: officerId ? officers.find(off => off.id === parseInt(officerId)) : null 
-              }
+      setComplaints(prevComplaints =>
+        prevComplaints.map(complaint =>
+          complaint.complaint_id === complaintId
+            ? {
+              ...complaint,
+              assigned_to: officerId ? officers.find(off => off.id === parseInt(officerId)) : null
+            }
             : complaint
         )
       );
-      
+
     } catch (error) {
       console.error('Failed to assign officer:', error);
       alert('Failed to assign officer');
@@ -193,10 +191,10 @@ const AdminComplaints = () => {
         apiService.getAllCategoryResolvers(),
         apiService.getResolverLevels()
       ]);
-      
+
       setCategoryResolvers(resolversData.results || resolversData);
       setLevels(levelsData.results || levelsData);
-      
+
       // Pre-select the complaint's category if available
       if (selectedComplaint?.category?.category_id) {
         setSelectedCategory(selectedComplaint.category.category_id);
@@ -208,27 +206,27 @@ const AdminComplaints = () => {
 
   const getRecommendedOfficers = () => {
     if (!selectedCategory) return officers;
-    
+
     // Get officers assigned to the selected category
     const categoryOfficers = categoryResolvers
-      .filter(resolver => 
-        resolver.category === selectedCategory && 
+      .filter(resolver =>
+        resolver.category === selectedCategory &&
         resolver.active &&
         (!selectedLevel || resolver.level === selectedLevel)
       )
       .map(resolver => resolver.officer);
-    
+
     // Get unique officer IDs
     const categoryOfficerIds = [...new Set(categoryOfficers)];
-    
+
     // Return officers assigned to this category, then all other officers
-    const recommended = officers.filter(officer => 
+    const recommended = officers.filter(officer =>
       categoryOfficerIds.includes(officer.id)
     );
-    const others = officers.filter(officer => 
+    const others = officers.filter(officer =>
       !categoryOfficerIds.includes(officer.id)
     );
-    
+
     return [...recommended, ...others];
   };
 
@@ -243,18 +241,18 @@ const AdminComplaints = () => {
         officer_id: reassignOfficerId,
         reason: reassignReason || 'Reassigned by admin'
       });
-      
+
       // Update UI
       const updatedOfficer = officers.find(off => off.id === parseInt(reassignOfficerId));
       setSelectedComplaint(prev => ({ ...prev, assigned_officer: updatedOfficer }));
-      setComplaints(prev => 
-        prev.map(c => 
-          c.complaint_id === selectedComplaint.complaint_id 
+      setComplaints(prev =>
+        prev.map(c =>
+          c.complaint_id === selectedComplaint.complaint_id
             ? { ...c, assigned_officer: updatedOfficer }
             : c
         )
       );
-      
+
       alert('Complaint reassigned successfully');
       setShowReassignModal(false);
       setReassignOfficerId('');
@@ -282,7 +280,7 @@ const AdminComplaints = () => {
       alert('Please fill in both title and message');
       return;
     }
-    
+
     try {
       await apiService.addComplaintResponse(selectedComplaint.complaint_id, {
         title: responseTitle,
@@ -319,8 +317,8 @@ const AdminComplaints = () => {
     const inProgress = complaints.filter(c => c.status === 'in_progress').length;
     const resolved = complaints.filter(c => c.status === 'resolved').length;
     const urgent = complaints.filter(c => c.priority === 'urgent').length;
-    
-    
+
+
     return { total, pending, inProgress, resolved, urgent };
   };
 
@@ -368,7 +366,7 @@ const AdminComplaints = () => {
             </label>
             <select
               value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               className={`w-full border rounded px-3 py-2 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
             >
               <option value="all">All Status</option>
@@ -385,7 +383,7 @@ const AdminComplaints = () => {
             </label>
             <select
               value={filters.category}
-              onChange={(e) => setFilters({...filters, category: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
               className={`w-full border rounded px-3 py-2 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
             >
               <option value="all">All Categories</option>
@@ -400,7 +398,7 @@ const AdminComplaints = () => {
             </label>
             <select
               value={filters.institution}
-              onChange={(e) => setFilters({...filters, institution: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, institution: e.target.value })}
               className={`w-full border rounded px-3 py-2 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
             >
               <option value="all">All Institutions</option>
@@ -435,7 +433,7 @@ const AdminComplaints = () => {
                   <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                     Status
                   </th>
-          
+
                   <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                     Category
                   </th>
@@ -533,7 +531,7 @@ const AdminComplaints = () => {
                 <p className={`${isDark ? 'text-gray-300' : 'text-gray-700'} mb-4`}>
                   {selectedComplaint.description}
                 </p>
-                
+
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Submitted by:</span>
@@ -670,23 +668,21 @@ const AdminComplaints = () => {
                     </h4>
                     <div className="space-y-3">
                       {responses.map((response, index) => (
-                        <div key={index} className={`p-4 rounded border-l-4 ${
-                          response.response_type === 'resolution' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
-                          response.response_type === 'escalation' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
-                          response.response_type === 'initial' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' :
-                          'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
-                        }`}>
+                        <div key={index} className={`p-4 rounded border-l-4 ${response.response_type === 'resolution' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' :
+                            response.response_type === 'escalation' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
+                              response.response_type === 'initial' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' :
+                                'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                          }`}>
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <h5 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                 {response.title}
                               </h5>
-                              <span className={`text-xs px-2 py-1 rounded mt-1 inline-block ${
-                                response.response_type === 'resolution' ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
-                                response.response_type === 'escalation' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
-                                response.response_type === 'initial' ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100' :
-                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
-                              }`}>
+                              <span className={`text-xs px-2 py-1 rounded mt-1 inline-block ${response.response_type === 'resolution' ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' :
+                                  response.response_type === 'escalation' ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' :
+                                    response.response_type === 'initial' ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100' :
+                                      'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+                                }`}>
                                 {response.response_type.replace('_', ' ').toUpperCase()}
                               </span>
                             </div>
@@ -723,7 +719,7 @@ const AdminComplaints = () => {
             <h3 className={`text-xl font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
               🔄 Reassign Complaint
             </h3>
-            
+
             {/* Complaint Info */}
             <div className={`mb-4 p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
               <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -796,12 +792,12 @@ const AdminComplaints = () => {
                 className={`w-full p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
               >
                 <option value="">Select an officer...</option>
-                {getRecommendedOfficers().map((officer, index) => {
+                {getRecommendedOfficers().map((officer) => {
                   const isRecommended = selectedCategory && categoryResolvers.some(
-                    resolver => resolver.officer === officer.id && 
-                    resolver.category === selectedCategory &&
-                    resolver.active &&
-                    (!selectedLevel || resolver.level === selectedLevel)
+                    resolver => resolver.officer === officer.id &&
+                      resolver.category === selectedCategory &&
+                      resolver.active &&
+                      (!selectedLevel || resolver.level === selectedLevel)
                   );
                   return (
                     <option key={officer.id} value={officer.id}>

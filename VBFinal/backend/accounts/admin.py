@@ -1,15 +1,34 @@
 from django.contrib import admin
-from .models import User, EmailLog, PasswordResetToken, EmailVerificationToken , Campus, College, Department
+from .models import (
+    Campus,
+    College,
+    Department,
+    EmailLog,
+    EmailVerificationToken,
+    Officer,
+    PasswordResetToken,
+    Program,
+    Student,
+    StudentType,
+    SystemLog,
+    User,
+)
+
+admin.site.register(SystemLog)
 admin.site.register(Campus)
 admin.site.register(College)
 admin.site.register(Department)
+admin.site.register(Program)
+admin.site.register(Student)
+admin.site.register(Officer)
+admin.site.register(StudentType)
 
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ("email", "full_name", "role", "college", "is_active", "is_email_verified", "date_joined")
-    list_filter = ("role", "is_active", "is_email_verified", "auth_provider", "college")
-    search_fields = ("email", "first_name", "last_name", "campus_id")
+    list_display = ("email", "full_name", "role", "is_active", "is_email_verified", "date_joined")
+    list_filter = ("role", "is_active", "is_email_verified", "auth_provider")
+    search_fields = ("email", "first_name", "last_name")
     readonly_fields = ("date_joined", "last_login")
 
 

@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.urls import reverse
+from django.core.exceptions import ValidationError as DjangoValidationError
 from pathlib import Path
-from .models import Institution, Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment
+from .models import Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment
 from .models import PublicAnnouncement
 
 from django.contrib.auth import get_user_model
@@ -62,12 +63,6 @@ class ComplaintUserSerializer(serializers.ModelSerializer):
         ref_name = "ComplaintUser"
 
 
-class InstitutionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Institution
-        fields = ["id", "name", "domain", "created_at"]
-
-
 class CategorySerializer(serializers.ModelSerializer):
     campus = serializers.PrimaryKeyRelatedField(
         queryset=Category._meta.get_field("campus").remote_field.model.objects.all(),
@@ -85,7 +80,6 @@ class CategorySerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
-    institution_name = serializers.CharField(source='institution.name', read_only=True)
     parent_name = serializers.CharField(source='parent.office_name', read_only=True)
     campus_name = serializers.CharField(source='campus.campus_name', read_only=True)
     college_name = serializers.CharField(source='college.college_name', read_only=True)
@@ -95,10 +89,9 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = [
             "category_id",
-            "institution",
-            "institution_name",
             "office_name",
             "office_description",
+            "office_scope",
             "campus",
             "campus_name",
             "college",
@@ -141,11 +134,9 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ResolverLevelSerializer(serializers.ModelSerializer):
-    institution_name = serializers.CharField(source='institution.name', read_only=True)
-
     class Meta:
         model = ResolverLevel
-        fields = ["id", "institution", "institution_name", "name", "level_order", "escalation_time"]
+        fields = ["id", "name", "level_order", "escalation_time"]
         read_only_fields = ["id"]
 
 
@@ -170,7 +161,7 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Complaint
-        fields = ["title", "description", "institution", "category", "attachment", "cc_emails", "cc_officer_ids"]
+        fields = ["title", "description", "category", "attachment", "cc_emails", "cc_officer_ids"]
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -194,6 +185,23 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
         for uploaded_file in uploaded_files:
             _validate_uploaded_file(uploaded_file)
 
+        submitter = attrs.get('submitted_by')
+        category = attrs.get('category')
+        if submitter and category:
+            draft = Complaint(
+                submitted_by=submitter,
+                category=category,
+                title=attrs.get('title', ''),
+                description=attrs.get('description', ''),
+                attachment=attrs.get('attachment'),
+            )
+            try:
+                draft.full_clean(exclude=['complaint_id', 'created_at', 'updated_at', 'status'])
+            except DjangoValidationError as exc:
+                if hasattr(exc, 'message_dict'):
+                    raise serializers.ValidationError(exc.message_dict)
+                raise serializers.ValidationError({'detail': exc.messages})
+
         return attrs
 
     def create(self, validated_data):
@@ -202,7 +210,12 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
         cc_emails = validated_data.pop('cc_emails', [])
         cc_officer_ids = validated_data.pop('cc_officer_ids', [])
         request = self.context.get('request')
-        complaint = Complaint.objects.create(**validated_data)
+        try:
+            complaint = Complaint.objects.create(**validated_data)
+        except DjangoValidationError as exc:
+            if hasattr(exc, 'message_dict'):
+                raise serializers.ValidationError(exc.message_dict)
+            raise serializers.ValidationError({'detail': exc.messages})
 
         if request and hasattr(request, 'FILES'):
             for key, file in request.FILES.items():
@@ -278,9 +291,10 @@ class ComplaintSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
         fields = [
-            "complaint_id", "institution", "submitted_by", "category",
+            "complaint_id", "submitted_by", "category",
             "title", "description", "attachment", "attachments", "cc_list",
             "created_at", "updated_at", "status",
+            "submitter_campus", "submitter_college", "submitter_department",
             "assigned_officer", "current_level", "escalation_deadline",
             "is_cc_user"
         ]
