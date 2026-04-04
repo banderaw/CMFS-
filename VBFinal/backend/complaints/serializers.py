@@ -59,7 +59,7 @@ def _attachment_payload(uploaded_file):
 class ComplaintUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name"]
+        fields = ["id", "username", "email", "first_name", "last_name", "role"]
         ref_name = "ComplaintUser"
 
 
@@ -186,6 +186,8 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
             _validate_uploaded_file(uploaded_file)
 
         submitter = attrs.get('submitted_by')
+        if submitter is None and request and getattr(request, 'user', None) and request.user.is_authenticated:
+            submitter = request.user
         category = attrs.get('category')
         if submitter and category:
             draft = Complaint(
@@ -247,7 +249,7 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
                 EmailService.send_cc_complaint_notification(officer, complaint)
             except Exception as e:
                 # Log error but don't fail the complaint creation
-                print(f"Failed to send CC email to {officer.email}: {str(e)}")
+                continue
 
         return complaint
 

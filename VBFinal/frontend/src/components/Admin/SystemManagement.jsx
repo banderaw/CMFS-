@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useMaintenanceMode } from '../../contexts/MaintenanceContext';
 import apiService from '../../services/api';
@@ -7,7 +7,15 @@ import systemLogger from '../../services/systemLogger';
 
 const SystemManagement = () => {
   const { isDark } = useTheme();
-  const { isMaintenanceMode, maintenanceEndTime, enableMaintenanceMode, disableMaintenanceMode, scheduleMaintenanceMode } = useMaintenanceMode();
+  const {
+    isMaintenanceMode,
+    maintenanceEndTime,
+    maintenanceMessage: currentMaintenanceMessage,
+    enableMaintenanceMode,
+    disableMaintenanceMode,
+    updateMaintenanceConfiguration,
+    scheduleMaintenanceMode
+  } = useMaintenanceMode();
   const [activeSystemTab, setActiveSystemTab] = useState('overview');
   const [systemStats, setSystemStats] = useState({
     uptime: '0 days',
@@ -41,6 +49,14 @@ const SystemManagement = () => {
   const [backupProgress, setBackupProgress] = useState(0);
   const [restoreProgress, setRestoreProgress] = useState(0);
   const [systemLogs, setSystemLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState(null);
+  const [logLevelFilter, setLogLevelFilter] = useState('');
+  const [logCategoryFilter, setLogCategoryFilter] = useState('');
+  const [logPage, setLogPage] = useState(1);
+  const [logCount, setLogCount] = useState(0);
+  const [hasNextLogPage, setHasNextLogPage] = useState(false);
+  const [hasPreviousLogPage, setHasPreviousLogPage] = useState(false);
   const [scheduledMaintenanceTime, setScheduledMaintenanceTime] = useState('');
   const [maintenanceMessage, setMaintenanceMessage] = useState('System is under maintenance. Please try again later.');
   const [maintenanceDuration, setMaintenanceDuration] = useState(30);
@@ -79,7 +95,6 @@ const SystemManagement = () => {
 
   useEffect(() => {
     loadSystemStats();
-    loadSystemLogs();
 
     // Load real-time stats immediately and then every 9 seconds
     updateRealTimeStats();
@@ -97,6 +112,10 @@ const SystemManagement = () => {
       clearInterval(alertsInterval);
     };
   }, []);
+
+  useEffect(() => {
+    setMaintenanceMessage(currentMaintenanceMessage || 'System is under maintenance. Please try again later.');
+  }, [currentMaintenanceMessage]);
 
   // Real-time system stats from backend
   const updateRealTimeStats = async () => {
@@ -227,14 +246,44 @@ const SystemManagement = () => {
     }
   };
 
-  const loadSystemLogs = async () => {
+  const loadSystemLogs = useCallback(async () => {
+    setLogsLoading(true);
+    setLogsError(null);
     try {
-      const data = await apiService.request('/system-logs/?limit=100');
-      setSystemLogs(data.results ?? data);
+      const data = await apiService.getSystemLogs({
+        limit: 100,
+        level: logLevelFilter,
+        category: logCategoryFilter,
+        page: logPage,
+      });
+
+      if (Array.isArray(data?.results)) {
+        setSystemLogs(data.results);
+        setLogCount(data.count ?? data.results.length);
+        setHasNextLogPage(Boolean(data.next));
+        setHasPreviousLogPage(Boolean(data.previous));
+      } else {
+        const normalized = Array.isArray(data) ? data : [];
+        setSystemLogs(normalized);
+        setLogCount(normalized.length);
+        setHasNextLogPage(false);
+        setHasPreviousLogPage(false);
+      }
     } catch (error) {
       console.error('Failed to load system logs:', error);
+      setSystemLogs([]);
+      setLogCount(0);
+      setHasNextLogPage(false);
+      setHasPreviousLogPage(false);
+      setLogsError(error.message || 'Failed to load system logs');
+    } finally {
+      setLogsLoading(false);
     }
-  };
+  }, [logLevelFilter, logCategoryFilter, logPage]);
+
+  useEffect(() => {
+    loadSystemLogs();
+  }, [loadSystemLogs]);
 
   const loadActiveSessions = async () => {
     setSessionsLoading(true);
@@ -422,7 +471,7 @@ const SystemManagement = () => {
             const errorMsg = error.response?.data || error.message;
             if (errorMsg?.name?.[0]?.includes('already exists') || error.response?.status === 400) {
               skippedCount++;
-              console.log('Institution already exists, skipping:', institution.name);
+              systemLogger.info(`Institution already exists, skipping: ${institution.name}`, 'RESTORE');
             } else {
               errorCount++;
               errors.push(`Institution "${institution.name}": ${JSON.stringify(errorMsg)}`);
@@ -461,7 +510,7 @@ const SystemManagement = () => {
             const errorMsg = error.response?.data || error.message;
             if (errorMsg?.name?.[0]?.includes('already exists') || (typeof errorMsg === 'object' && JSON.stringify(errorMsg).includes('already exists'))) {
               skippedCount++;
-              console.log('Category already exists, skipping:', category.name);
+              systemLogger.info(`Category already exists, skipping: ${category.name}`, 'RESTORE');
             } else {
               errorCount++;
               errors.push(`Category "${category.name}": ${JSON.stringify(errorMsg)}`);
@@ -517,25 +566,31 @@ const SystemManagement = () => {
     }
   };
 
-  const handleMaintenanceToggle = () => {
+  const handleMaintenanceToggle = async () => {
     if (isMaintenanceMode) {
       if (confirm('Are you sure you want to disable maintenance mode? Users will be able to access the system.')) {
-        disableMaintenanceMode();
-        // Clear scheduled maintenance notification
-        localStorage.removeItem('scheduled_maintenance');
-        systemLogger.info('Maintenance mode disabled by admin', 'MAINTENANCE');
-        alert('Maintenance mode disabled. System is now accessible to all users.');
+        try {
+          await disableMaintenanceMode();
+          systemLogger.info('Maintenance mode disabled by admin', 'MAINTENANCE');
+          alert('Maintenance mode disabled. System is now accessible to all users.');
+        } catch (error) {
+          alert(`Failed to disable maintenance mode: ${error.message}`);
+        }
       }
     } else {
       if (confirm(`Are you sure you want to enable maintenance mode for ${maintenanceDuration} minutes? This will prevent non-admin users from accessing the system.`)) {
-        enableMaintenanceMode(maintenanceMessage, maintenanceDuration);
-        systemLogger.warn(`Maintenance mode enabled by admin for ${maintenanceDuration} minutes`, 'MAINTENANCE');
-        alert(`Maintenance mode enabled for ${maintenanceDuration} minutes. Only administrators can access the system.`);
+        try {
+          await enableMaintenanceMode(maintenanceMessage, maintenanceDuration);
+          systemLogger.warn(`Maintenance mode enabled by admin for ${maintenanceDuration} minutes`, 'MAINTENANCE');
+          alert(`Maintenance mode enabled for ${maintenanceDuration} minutes. Only administrators can access the system.`);
+        } catch (error) {
+          alert(`Failed to enable maintenance mode: ${error.message}`);
+        }
       }
     }
   };
 
-  const handleScheduleMaintenance = () => {
+  const handleScheduleMaintenance = async () => {
     if (!scheduledMaintenanceTime) {
       alert('Please select a date and time for scheduled maintenance.');
       return;
@@ -549,18 +604,17 @@ const SystemManagement = () => {
       return;
     }
 
-    // Save to localStorage for user notifications
-    const maintenanceData = {
-      scheduled_time: scheduledTime.toISOString(),
-      message: maintenanceMessage,
-      scheduled_by: 'Admin',
-      scheduled_at: now.toISOString()
-    };
-    localStorage.setItem('scheduled_maintenance', JSON.stringify(maintenanceData));
-
-    scheduleMaintenanceMode(scheduledTime.toISOString(), `Scheduled maintenance at ${scheduledTime.toLocaleString()}`);
-    alert(`Maintenance scheduled for ${scheduledTime.toLocaleString()}. Users will be notified.`);
-    setScheduledMaintenanceTime('');
+    try {
+      await scheduleMaintenanceMode(
+        scheduledTime.toISOString(),
+        maintenanceMessage,
+        maintenanceDuration
+      );
+      alert(`Maintenance scheduled for ${scheduledTime.toLocaleString()}. Users will be notified.`);
+      setScheduledMaintenanceTime('');
+    } catch (error) {
+      alert(`Failed to schedule maintenance: ${error.message}`);
+    }
   };
 
   const handleClearCache = async () => {
@@ -779,10 +833,14 @@ const SystemManagement = () => {
             placeholder="Enter message to display to users during maintenance..."
           />
           <button
-            onClick={() => {
+            onClick={async () => {
               if (isMaintenanceMode) {
-                enableMaintenanceMode(maintenanceMessage);
-                alert('Maintenance message updated!');
+                try {
+                  await updateMaintenanceConfiguration({ message: maintenanceMessage });
+                  alert('Maintenance message updated!');
+                } catch (error) {
+                  alert(`Failed to update maintenance message: ${error.message}`);
+                }
               }
             }}
             disabled={!isMaintenanceMode}
@@ -992,8 +1050,9 @@ const SystemManagement = () => {
             <button
               onClick={async () => {
                 if (!confirm('Clear all system logs?')) return;
-                await apiService.request('/system-logs/clear/', { method: 'DELETE' });
-                setSystemLogs([]);
+                await apiService.clearSystemLogs();
+                setLogPage(1);
+                await loadSystemLogs();
               }}
               className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors"
             >
@@ -1008,10 +1067,42 @@ const SystemManagement = () => {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <select
+            value={logLevelFilter}
+            onChange={(e) => {
+              setLogPage(1);
+              setLogLevelFilter(e.target.value);
+            }}
+            className={`p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+          >
+            <option value="">All Levels</option>
+            <option value="INFO">INFO</option>
+            <option value="WARN">WARN</option>
+            <option value="ERROR">ERROR</option>
+            <option value="SUCCESS">SUCCESS</option>
+          </select>
+
+          <input
+            type="text"
+            value={logCategoryFilter}
+            onChange={(e) => {
+              setLogPage(1);
+              setLogCategoryFilter(e.target.value.trim().toUpperCase());
+            }}
+            placeholder="Filter by category (e.g. REQUEST)"
+            className={`p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+          />
+
+          <div className={`p-2 rounded text-sm ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}>
+            Showing {systemLogs.length} of {logCount}
+          </div>
+        </div>
+
         {/* Log Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-lg font-bold text-blue-500">{systemLogs.length}</div>
+            <div className="text-lg font-bold text-blue-500">{logCount}</div>
             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Logs</div>
           </div>
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
@@ -1028,8 +1119,18 @@ const SystemManagement = () => {
           </div>
         </div>
 
+        {logsError && (
+          <div className={`mb-4 p-3 rounded ${isDark ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700'}`}>
+            {logsError}
+          </div>
+        )}
+
         <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto`}>
-          {systemLogs.length === 0 ? (
+          {logsLoading ? (
+            <div className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-500'} py-4`}>
+              Loading logs...
+            </div>
+          ) : systemLogs.length === 0 ? (
             <div className={`text-center ${isDark ? 'text-gray-400' : 'text-gray-500'} py-4`}>
               No system logs available
             </div>
@@ -1068,6 +1169,24 @@ const SystemManagement = () => {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <button
+            onClick={() => setLogPage((prev) => Math.max(1, prev - 1))}
+            disabled={!hasPreviousLogPage || logsLoading}
+            className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Page {logPage}</span>
+          <button
+            onClick={() => setLogPage((prev) => prev + 1)}
+            disabled={!hasNextLogPage || logsLoading}
+            className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 transition-colors disabled:opacity-50"
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>

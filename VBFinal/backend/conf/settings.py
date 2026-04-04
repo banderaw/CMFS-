@@ -1,26 +1,54 @@
-from pathlib import Path
 import os
+from datetime import timedelta
+from pathlib import Path
+
 import dj_database_url
 from dotenv import load_dotenv
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
-SECRET_KEY = os.getenv('SECRET_KEY')
-DEBUG = os.getenv('DEBUG')
+
+
+def env_bool(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_list(name, default=None):
+    raw = os.getenv(name)
+    if raw is None:
+        return list(default or [])
+    return [item.strip() for item in raw.split(',') if item.strip()]
+
+
+DEBUG = env_bool('DEBUG', False)
+SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-me' if DEBUG else None)
+if not SECRET_KEY:
+    raise ValueError('SECRET_KEY environment variable is required when DEBUG is false.')
+
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-ALLOWED_HOSTS = [
-    "*",
-    "10.139.27.220",
-    "192.168.137.139",
-    "localhost",
-    "127.0.0.1",    
-    "cmfs.onrender.com",
-    "cmfs.vercel.app",
-     ]
-CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:5173",
-    "https://cmfs.onrender.com",
-    "https://cmfs.vercel.app",
-]
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://127.0.0.1:8000')
+
+default_allowed_hosts = ['localhost', '127.0.0.1']
+default_cors_origins = [FRONTEND_URL] if FRONTEND_URL else ['http://localhost:5173']
+
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', default_allowed_hosts)
+CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', default_cors_origins)
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', default_cors_origins)
+
+if DEBUG:
+    for host in ['localhost', '127.0.0.1']:
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
+    for origin in ['http://127.0.0.1:5173', 'http://localhost:5173']:
+        if origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(origin)
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -28,34 +56,30 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    "accounts.apps.AccountsConfig",
-    "complaints",
-    "feedback",
-    "contact",
-    "rest_framework",
+    'accounts.apps.AccountsConfig',
+    'complaints',
+    'feedback',
+    'contact',
+    'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'drf_yasg',
-    "corsheaders",
+    'corsheaders',
     'social_django',
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware", 
-    "django.middleware.common.CommonMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'accounts.middleware.RequestLogMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:5173", 
-    "https://cmfs.vercel.app",
-]
-CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -68,22 +92,14 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-CORS_EXPOSE_HEADERS = [
-    'content-type',
-    'x-csrftoken',
-]
+CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
+CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
 CORS_PREFLIGHT_MAX_AGE = 86400
+
 SWAGGER_SETTINGS = {
-    "DEFAULT_API_URL":"http://127.0.0.1:8000",
+    'DEFAULT_API_URL': BACKEND_URL,
 }
+
 ROOT_URLCONF = 'conf.urls'
 TEMPLATES = [
     {
@@ -103,64 +119,80 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'conf.wsgi.application'
-DATABASE_URL = os.getenv('DATABASE_URL')
-if not DATABASE_URL:
-    raise ValueError(
-        'DATABASE_URL environment variable is required.'
-    )
 
-# DATABASES = {
-#     'default': dj_database_url.parse(
-#         DATABASE_URL,
-#         conn_max_age=600,
-#         ssl_require=True,
-#     )
-# }
+# DATABASE_URL = os.getenv('DATABASE_URL')
+# if DATABASE_URL:
+#     DATABASES = {
+#         'default': dj_database_url.parse(
+#             DATABASE_URL,
+#             conn_max_age=600,
+#             ssl_require=not DEBUG,
+#         )
+#     }
+# elif DEBUG:
+#     DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.db.backends.sqlite3',
+#             'NAME': BASE_DIR / 'db.sqlite3',
+#         }
+#     }
+# else:
+#     raise ValueError('DATABASE_URL environment variable is required when DEBUG is false.')
+
+
 
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3', # Path to the database file
+        'ENGINE': os.getenv('DB_ENGINE'),
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
+    }
+}
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'cmfs-cache',
     }
 }
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
+
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 AUTH_USER_MODEL = 'accounts.User'
-AUTHENTICATION_BACKENDS = [
-    'accounts.backends.EmailOrUsernameModelBackend',  
-    'django.contrib.auth.backends.ModelBackend', 
-]
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.azuread.AzureADOAuth2',
+    'accounts.backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+)
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-        'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 10,
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
 }
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
@@ -172,8 +204,7 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 if DEBUG and not EMAIL_HOST_USER:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-from datetime import timedelta
-JWT_SESSION_TIMEOUT_MINUTES = 60  
+JWT_SESSION_TIMEOUT_MINUTES = 60
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=JWT_SESSION_TIMEOUT_MINUTES),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -190,14 +221,10 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
+
 SOCIAL_AUTH_AZUREAD_OAUTH2_KEY = os.getenv('MICROSOFT_CLIENT_ID', '')
 SOCIAL_AUTH_AZUREAD_OAUTH2_SECRET = os.getenv('MICROSOFT_CLIENT_SECRET', '')
 SOCIAL_AUTH_AZUREAD_OAUTH2_TENANT_ID = os.getenv('MICROSOFT_TENANT_ID', 'common')
-AUTHENTICATION_BACKENDS = (
-    'social_core.backends.azuread.AzureADOAuth2',
-    'accounts.backends.EmailOrUsernameModelBackend',
-    'django.contrib.auth.backends.ModelBackend',
-)
 
 SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.social_details',
@@ -215,4 +242,3 @@ SOCIAL_AUTH_URL_NAMESPACE = os.getenv('SOCIAL_AUTH_URL_NAMESPACE')
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = os.getenv('SOCIAL_AUTH_LOGIN_REDIRECT_URL')
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = os.getenv('SOCIAL_AUTH_NEW_USER_REDIRECT_URL')
 SOCIAL_AUTH_LOGIN_ERROR_URL = os.getenv('SOCIAL_AUTH_LOGIN_ERROR_URL')
-

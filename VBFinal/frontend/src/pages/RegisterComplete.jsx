@@ -4,8 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import PublicNavbar from '../components/UI/PublicNavbar';
 import PublicFooter from '../components/UI/PublicFooter';
-
-const API = import.meta.env.VITE_API_URL || '/api';
+import apiService from '../services/api';
+import authService from '../services/auth';
 
 const RegisterComplete = () => {
   const navigate = useNavigate();
@@ -41,25 +41,39 @@ const RegisterComplete = () => {
 
   useEffect(() => {
     if (accessToken) {
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('refresh', refreshToken);
+      authService.setAuthData({ access: accessToken, refresh: refreshToken });
+      apiService.setToken(accessToken);
     }
-    fetch(`${API}/campuses/`).then(r => r.json()).then(setCampuses).catch(() => {});
+
+    apiService.getCampuses()
+      .then((data) => setCampuses(data.results || data || []))
+      .catch(() => {});
   }, [accessToken, refreshToken]);
 
   useEffect(() => {
-    if (!formData.user_campus) { setColleges([]); setDepartments([]); return; }
+    if (!formData.user_campus) {
+      setColleges([]);
+      setDepartments([]);
+      return;
+    }
+
     setFormData(prev => ({ ...prev, college: '', department: '' }));
     setDepartments([]);
-    fetch(`${API}/colleges/?campus=${formData.user_campus}`)
-      .then(r => r.json()).then(setColleges).catch(() => {});
+    apiService.getColleges(formData.user_campus)
+      .then((data) => setColleges(data.results || data || []))
+      .catch(() => {});
   }, [formData.user_campus]);
 
   useEffect(() => {
-    if (!formData.college) { setDepartments([]); return; }
+    if (!formData.college) {
+      setDepartments([]);
+      return;
+    }
+
     setFormData(prev => ({ ...prev, department: '' }));
-    fetch(`${API}/departments/?college=${formData.college}`)
-      .then(r => r.json()).then(setDepartments).catch(() => {});
+    apiService.getDepartments(formData.college)
+      .then((data) => setDepartments(data.results || data || []))
+      .catch(() => {});
   }, [formData.college]);
 
   const handleChange = (e) => {
@@ -90,12 +104,12 @@ const RegisterComplete = () => {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const payload = {
         campus_id: formData.campus_id,
         user_campus: formData.user_campus,
         college: formData.college,
       };
+
       if (formData.department) payload.department = formData.department;
       if (formData.phone?.trim()) payload.phone = formData.phone;
       if (formData.gmail_account?.trim()) payload.gmail_account = formData.gmail_account.trim().toLowerCase();
@@ -106,36 +120,36 @@ const RegisterComplete = () => {
         payload.confirm_password = formData.confirm_password;
       }
 
-      const response = await fetch('/api/accounts/me/', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
+      const userData = await apiService.updateCurrentUser(payload);
+      authService.setAuthData({ user: userData });
+      setAuth(userData, authService.getToken());
+      setSuccess('Profile updated successfully! Redirecting...');
 
-      if (response.ok) {
-        const userData = await response.json();
-        localStorage.setItem('user', JSON.stringify(userData));
-        setAuth(userData, token);
-        setSuccess('Profile updated successfully! Redirecting...');
-        setTimeout(() => {
-          const role = userData.role;
-          if (role === 'admin') navigate('/admin');
-          else if (role === 'officer') navigate('/officer');
-          else navigate('/user');
-        }, 1500);
+      setTimeout(() => {
+        const role = userData.role;
+        if (role === 'admin') navigate('/admin');
+        else if (role === 'officer') navigate('/officer');
+        else navigate('/user');
+      }, 1500);
+    } catch (requestError) {
+      const [, errorPayload = ''] = (requestError.message || '').split(' - ', 2);
+      if (!errorPayload) {
+        setError('An error occurred. Please check your connection and try again.');
       } else {
-        const data = await response.json();
-        if (data.detail) {
-          setError(data.detail);
-        } else {
-          const msgs = Object.entries(data)
-            .map(([k, v]) => `${k.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}: ${Array.isArray(v) ? v.join(', ') : v}`)
-            .join('. ');
-          setError(msgs || 'Failed to update profile. Please try again.');
+        try {
+          const data = JSON.parse(errorPayload);
+          if (data.detail) {
+            setError(data.detail);
+          } else {
+            const messages = Object.entries(data)
+              .map(([key, value]) => `${key.replace('_', ' ').replace(/\b\w/g, char => char.toUpperCase())}: ${Array.isArray(value) ? value.join(', ') : value}`)
+              .join('. ');
+            setError(messages || 'Failed to update profile. Please try again.');
+          }
+        } catch {
+          setError('An error occurred. Please check your connection and try again.');
         }
       }
-    } catch {
-      setError('An error occurred. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -169,7 +183,6 @@ const RegisterComplete = () => {
             {success && <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">{success}</div>}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Name */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className={labelCls}>First Name *</label>
@@ -181,26 +194,25 @@ const RegisterComplete = () => {
                 </div>
               </div>
 
-              {/* Email (read-only) */}
               <div>
                 <label className={labelCls}>Email Address</label>
-                <input type="email" value={email} disabled
+                <input
+                  type="email"
+                  value={email}
+                  disabled
                   className={`mt-1 block w-full px-3 py-2 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-gray-400 cursor-not-allowed' : 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'}`}
                 />
                 <p className={`mt-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Authenticated via Microsoft</p>
               </div>
 
-              {/* Campus ID + Phone */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className={labelCls}>Campus ID *</label>
-                  <input type="text" name="campus_id" required value={formData.campus_id} onChange={handleChange}
-                    placeholder="UoG/..." className={inputCls} />
+                  <input type="text" name="campus_id" required value={formData.campus_id} onChange={handleChange} placeholder="UoG/..." className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Phone Number</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange}
-                    placeholder="+251..." className={inputCls} />
+                  <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="+251..." className={inputCls} />
                 </div>
               </div>
 
@@ -216,50 +228,44 @@ const RegisterComplete = () => {
                 />
               </div>
 
-              {/* Campus */}
               <div>
                 <label className={labelCls}>Campus *</label>
                 <select name="user_campus" value={formData.user_campus} onChange={handleChange} required className={inputCls}>
                   <option value="">Select your campus</option>
-                  {campuses.map(c => (
-                    <option key={c.id} value={c.id}>{c.campus_name}</option>
+                  {campuses.map(campus => (
+                    <option key={campus.id} value={campus.id}>{campus.campus_name}</option>
                   ))}
                 </select>
               </div>
 
-              {/* College */}
               <div>
                 <label className={labelCls}>College / Institute *</label>
                 <select name="college" value={formData.college} onChange={handleChange} required disabled={!formData.user_campus} className={inputCls}>
                   <option value="">{formData.user_campus ? 'Select your college' : 'Select a campus first'}</option>
-                  {colleges.map(c => (
-                    <option key={c.id} value={c.id}>{c.college_name}</option>
+                  {colleges.map(college => (
+                    <option key={college.id} value={college.id}>{college.college_name}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Department */}
               <div>
                 <label className={labelCls}>Department</label>
                 <select name="department" value={formData.department} onChange={handleChange} disabled={!formData.college} className={inputCls}>
                   <option value="">{formData.college ? 'Select your department (optional)' : 'Select a college first'}</option>
-                  {departments.map(d => (
-                    <option key={d.id} value={d.id}>{d.department_name}</option>
+                  {departments.map(department => (
+                    <option key={department.id} value={department.id}>{department.department_name}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Password */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className={labelCls}>New Password</label>
-                  <input type="password" name="password" value={formData.password} onChange={handleChange}
-                    placeholder="Optional" className={inputCls} />
+                  <input type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Optional" className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Confirm Password</label>
-                  <input type="password" name="confirm_password" value={formData.confirm_password} onChange={handleChange}
-                    placeholder="Optional" className={inputCls} />
+                  <input type="password" name="confirm_password" value={formData.confirm_password} onChange={handleChange} placeholder="Optional" className={inputCls} />
                 </div>
               </div>
 
@@ -269,8 +275,11 @@ const RegisterComplete = () => {
                 </p>
               </div>
 
-              <button type="submit" disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-4 rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg hover:shadow-xl">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 px-4 rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold shadow-lg hover:shadow-xl"
+              >
                 {loading ? (
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

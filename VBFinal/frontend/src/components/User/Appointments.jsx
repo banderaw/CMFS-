@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
+import apiService from '../../services/api';
 
 const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
@@ -15,18 +16,20 @@ const Appointments = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const token = localStorage.getItem('token');
-  const headers = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
-
   useEffect(() => {
-    fetch('/api/appointments/', { headers })
-      .then(r => r.json())
-      .then(appts => {
-        setAppointments(appts.results ?? appts);
-      })
-      .catch(() => { })
-      .finally(() => setLoading(false));
-  }, [headers]);
+    const loadAppointments = async () => {
+      try {
+        const appts = await apiService.getAppointments();
+        setAppointments(appts.results ?? appts ?? []);
+      } catch {
+        setAppointments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAppointments();
+  }, []);
 
   const cardCls = `${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-sm p-5`;
 
@@ -38,7 +41,6 @@ const Appointments = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('appointments')}</h2>
@@ -48,10 +50,9 @@ const Appointments = () => {
         </div>
       </div>
 
-      {/* Appointments List */}
       {appointments.length === 0 ? (
         <div className={`${cardCls} text-center py-12`}>
-          <div className="text-4xl mb-3">📅</div>
+          <div className="text-4xl mb-3">ðŸ“…</div>
           <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t('no_appointments_yet')}</p>
           <p className={`text-sm mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
             {t('appointments_will_appear')}
@@ -59,20 +60,20 @@ const Appointments = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {appointments.map(appt => (
-            <div key={appt.id} className={cardCls}>
+          {appointments.map(appointment => (
+            <div key={appointment.id} className={cardCls}>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{appt.complaint_title}</p>
+                  <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{appointment.complaint_title}</p>
                   <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    <span>📅 {new Date(appt.scheduled_at).toLocaleString()}</span>
-                    {appt.location && <span>📍 {appt.location}</span>}
-                    {appt.officer && <span>👤 {appt.officer.first_name} {appt.officer.last_name}</span>}
+                    <span>ðŸ“… {new Date(appointment.scheduled_at).toLocaleString()}</span>
+                    {appointment.location && <span>ðŸ“ {appointment.location}</span>}
+                    {appointment.officer && <span>ðŸ‘¤ {appointment.officer.first_name} {appointment.officer.last_name}</span>}
                   </div>
-                  {appt.note && <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{appt.note}</p>}
+                  {appointment.note && <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{appointment.note}</p>}
                 </div>
-                <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[appt.status]}`}>
-                  {appt.status}
+                <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium capitalize ${STATUS_COLORS[appointment.status]}`}>
+                  {appointment.status}
                 </span>
               </div>
             </div>

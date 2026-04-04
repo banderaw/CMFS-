@@ -6,8 +6,18 @@ class ApiService {
   }
 
   setToken(token) {
-    this.token = token;
-    localStorage.setItem('token', token);
+    this.token = token || null;
+    if (token) {
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('token');
+    }
+  }
+
+  clearAuthStorage() {
+    this.setToken(null);
+    localStorage.removeItem('refresh');
+    localStorage.removeItem('user');
   }
 
   getHeaders(isFormData = false, skipAuth = false) {
@@ -34,9 +44,7 @@ class ApiService {
     });
 
     if (!response.ok) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh');
-      localStorage.removeItem('user');
+      this.clearAuthStorage();
       throw new Error('Token refresh failed');
     }
 
@@ -61,6 +69,7 @@ class ApiService {
           config.headers = this.getHeaders(options.isFormData);
           response = await fetch(url, config);
         } catch (refreshError) {
+          this.clearAuthStorage();
           window.location.href = '/login';
           throw refreshError;
         }
@@ -85,6 +94,10 @@ class ApiService {
   // Feedback Template Management
   async getFeedbackTemplates() {
     return this.request('/feedback/templates/');
+  }
+
+  async getFeedbackTemplate(templateId) {
+    return this.request(`/feedback/templates/${templateId}/`);
   }
 
   async createFeedbackTemplate(templateData) {
@@ -118,6 +131,29 @@ class ApiService {
     });
   }
 
+  async closeFeedbackTemplate(templateId) {
+    return this.request(`/feedback/templates/${templateId}/close/`, {
+      method: 'POST'
+    });
+  }
+
+  async deleteFeedbackTemplate(templateId) {
+    return this.request(`/feedback/templates/${templateId}/`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getFeedbackTemplateAnalytics(templateId) {
+    return this.request(`/feedback/templates/${templateId}/analytics/`);
+  }
+
+  async submitFeedbackResponse(data) {
+    return this.request('/feedback/responses/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getOfficerTemplates() {
     return this.request('/officer/templates/');
   }
@@ -143,6 +179,45 @@ class ApiService {
   // Active Sessions
   async getActiveSessions() {
     return this.request('/system/active-sessions/');
+  }
+
+  async getMaintenanceStatus() {
+    return this.request('/system/maintenance/', {
+      skipAuth: true,
+    });
+  }
+
+  async getSystemLogs({ limit = 100, level = '', category = '', page = 1 } = {}) {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (level) params.set('level', level);
+    if (category) params.set('category', category);
+    if (page) params.set('page', String(page));
+    return this.request(`/system-logs/?${params.toString()}`);
+  }
+
+  async clearSystemLogs() {
+    return this.request('/system-logs/clear/', {
+      method: 'DELETE',
+    });
+  }
+
+  async updateMaintenanceStatus(data) {
+    return this.request('/system/maintenance/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCurrentUserProfile() {
+    return this.request('/accounts/me/');
+  }
+
+  async updateCurrentUser(data) {
+    return this.request('/accounts/me/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
   }
   async getComplaints() {
     return this.request('/complaints/');
@@ -196,6 +271,13 @@ class ApiService {
     return this.request(`/complaints/${id}/reassign/`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  async changeComplaintStatus(id, statusValue) {
+    return this.request(`/complaints/${id}/change-status/`, {
+      method: 'POST',
+      body: JSON.stringify({ status: statusValue }),
     });
   }
 
@@ -395,6 +477,28 @@ class ApiService {
     return this.request(url);
   }
 
+  async getAllCategories() {
+    let allCategories = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await this.getCategories(page);
+      const categories = response.results || response;
+
+      if (Array.isArray(categories)) {
+        allCategories = allCategories.concat(categories);
+      } else {
+        return response;
+      }
+
+      hasMore = response.next !== null;
+      page += 1;
+    }
+
+    return { results: allCategories, count: allCategories.length };
+  }
+
   async getCategoriesByLanguage(language = 'en') {
     return this.request(`/categories/by-language/?lang=${language}`);
   }
@@ -527,14 +631,6 @@ class ApiService {
   }
 
   async updateUser(id, data) {
-    if (data.password) {
-      // Password update requires a different endpoint usually, but UserViewSet uses 'me' or specific ID with PATCH
-      // If we are updating ourselves, use /accounts/me/
-      return this.request('/accounts/me/', {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      });
-    }
     return this.request(`/accounts/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -544,6 +640,44 @@ class ApiService {
   async deleteUser(id) {
     return this.request(`/accounts/${id}/`, {
       method: 'DELETE',
+    });
+  }
+
+  async getNotifications() {
+    return this.request('/notifications/');
+  }
+
+  async getUnreadNotifications() {
+    return this.request('/notifications/unread/');
+  }
+
+  async markNotificationAsRead(id) {
+    return this.request(`/notifications/${id}/mark-as-read/`, {
+      method: 'POST',
+    });
+  }
+
+  async markAllNotificationsAsRead() {
+    return this.request('/notifications/mark-all-as-read/', {
+      method: 'POST',
+    });
+  }
+
+  async getAppointments() {
+    return this.request('/appointments/');
+  }
+
+  async createAppointment(data) {
+    return this.request('/appointments/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAppointmentStatus(id, statusValue) {
+    return this.request(`/appointments/${id}/status/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: statusValue }),
     });
   }
 

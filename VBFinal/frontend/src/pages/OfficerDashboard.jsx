@@ -70,30 +70,19 @@ const OfficerDashboard = () => {
 
   const fetchDashboardStats = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+      const complaintsData = await apiService.getComplaints();
+      const allComplaints = complaintsData.results || complaintsData || [];
 
-      // Fetch complaints to calculate stats
-      const complaintsResponse = await fetch('/api/complaints/', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const assignedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id).length;
+      const resolvedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'resolved').length;
+      const pendingComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'pending').length;
+
+      setDashboardStats({
+        assignedComplaints,
+        resolvedComplaints,
+        pendingComplaints,
+        totalTemplates: Array.isArray(templates) ? templates.length : 0
       });
-
-      if (complaintsResponse.ok) {
-        const complaintsData = await complaintsResponse.json();
-        const allComplaints = complaintsData.results || complaintsData;
-
-        // Calculate stats
-        const assignedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id).length;
-        const resolvedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'resolved').length;
-        const pendingComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'pending').length;
-
-        setDashboardStats({
-          assignedComplaints,
-          resolvedComplaints,
-          pendingComplaints,
-          totalTemplates: Array.isArray(templates) ? templates.length : 0
-        });
-      }
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
     }
@@ -102,33 +91,8 @@ const OfficerDashboard = () => {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No access token found - user may need to login');
-        setTemplates([]);
-        return;
-      }
-
-      const response = await fetch('/api/feedback/templates/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.status === 401 || response.status === 403) {
-        console.error('Authentication failed - token may be expired');
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(Array.isArray(data) ? data : data.results || []);
-      } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      const data = await apiService.getFeedbackTemplates();
+      setTemplates(Array.isArray(data) ? data : data.results || []);
     } catch (error) {
       console.error('Error fetching templates:', error);
       setTemplates([]);
@@ -142,36 +106,10 @@ const OfficerDashboard = () => {
   const fetchComplaints = useCallback(async () => {
     setComplaintsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No access token found - user may need to login');
-        setComplaints([]);
-        return;
-      }
-
-      const response = await fetch('/api/complaints/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.status === 401 || response.status === 403) {
-        console.error('Authentication failed - token may be expired');
-        localStorage.removeItem('token');
-        window.location.href = '/login';
-        return;
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-        // Filter complaints assigned to current user only
-        const assignedComplaints = (Array.isArray(data) ? data : data.results || [])
-          .filter(complaint => complaint.assigned_officer?.id === user?.id);
-        setComplaints(assignedComplaints);
-      } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      const data = await apiService.getComplaints();
+      const assignedComplaints = (Array.isArray(data) ? data : data.results || [])
+        .filter(complaint => complaint.assigned_officer?.id === user?.id);
+      setComplaints(assignedComplaints);
     } catch (error) {
       console.error('Error fetching complaints:', error);
       setComplaints([]);
@@ -182,22 +120,8 @@ const OfficerDashboard = () => {
 
   const fetchCCComplaints = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch('/api/complaints/cc/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCcComplaints(Array.isArray(data) ? data : data.results || []);
-      } else {
-        setCcComplaints([]);
-      }
+      const data = await apiService.getCCComplaints();
+      setCcComplaints(Array.isArray(data) ? data : data.results || []);
     } catch (error) {
       console.error('Error fetching CC complaints:', error);
       setCcComplaints([]);
@@ -232,52 +156,27 @@ const OfficerDashboard = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/complaints/${selectedComplaint.complaint_id}/reassign/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          officer_id: reassignOfficerId,
-          reason: reassignReason || 'Reassigned by officer'
-        })
+      await apiService.reassignComplaint(selectedComplaint.complaint_id, {
+        officer_id: reassignOfficerId,
+        reason: reassignReason || 'Reassigned by officer'
       });
-
-      if (response.ok) {
-        alert('Complaint reassigned successfully');
-        setShowReassignModal(false);
-        setReassignOfficerId('');
-        setReassignReason('');
-        fetchComplaints();
-      } else {
-        const error = await response.json();
-        alert('Failed to reassign: ' + (error.error || 'Unknown error'));
-      }
+      alert('Complaint reassigned successfully');
+      setShowReassignModal(false);
+      setReassignOfficerId('');
+      setReassignReason('');
+      fetchComplaints();
     } catch (error) {
       console.error('Error reassigning complaint:', error);
-      alert('Failed to reassign complaint');
+      alert(error.message || 'Failed to reassign complaint');
     }
   };
 
   const handleUpdateStatus = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/complaints/${selectedComplaint.complaint_id}/change-status/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      if (response.ok) {
-        fetchComplaints();
-        setNewStatus('');
-        alert('Status updated successfully');
-      }
+      await apiService.changeComplaintStatus(selectedComplaint.complaint_id, newStatus);
+      fetchComplaints();
+      setNewStatus('');
+      alert('Status updated successfully');
     } catch (error) {
       console.error('Error updating status:', error);
     }
@@ -290,30 +189,15 @@ const OfficerDashboard = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/responses/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          complaint: selectedComplaint.complaint_id,
-          title: 'Officer Response',
-          message: responseText,
-          response_type: 'update'
-        })
+      await apiService.createResponse({
+        complaint: selectedComplaint.complaint_id,
+        title: 'Officer Response',
+        message: responseText,
+        response_type: 'update'
       });
-
-      if (response.ok) {
-        setResponseText('');
-        fetchResponses();
-        alert('Response added successfully');
-      } else {
-        const errorData = await response.json();
-        console.error('Error response:', errorData);
-        alert('Failed to add response');
-      }
+      setResponseText('');
+      fetchResponses();
+      alert('Response added successfully');
     } catch (error) {
       console.error('Error adding response:', error);
       alert('Failed to add response');
@@ -324,14 +208,8 @@ const OfficerDashboard = () => {
     const targetComplaintId = complaintId || selectedComplaint?.complaint_id;
     if (!targetComplaintId) return;
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/complaints/${targetComplaintId}/responses/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setResponses(data);
-      }
+      const data = await apiService.getComplaintResponses(targetComplaintId);
+      setResponses(data.results || data || []);
     } catch (error) {
       console.error('Error fetching responses:', error);
     }
@@ -341,14 +219,8 @@ const OfficerDashboard = () => {
     const targetComplaintId = complaintId || selectedComplaint?.complaint_id;
     if (!targetComplaintId) return;
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/complaints/${targetComplaintId}/comments/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setComments(data);
-      }
+      const data = await apiService.getComplaintComments(targetComplaintId);
+      setComments(data.results || data || []);
     } catch (error) {
       console.error('Error fetching comments:', error);
     }
@@ -357,42 +229,28 @@ const OfficerDashboard = () => {
   const handleDeleteResponse = async (responseId) => {
     if (!confirm('Are you sure you want to delete this response?')) return;
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/responses/${responseId}/`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        fetchResponses();
-        alert('Response deleted successfully');
-      }
+      await apiService.deleteResponse(responseId);
+      fetchResponses();
+      alert('Response deleted successfully');
     } catch (error) {
       console.error('Error deleting response:', error);
     }
   };
 
   const handleStatusChange = async (templateId, newStatus) => {
-    const action = newStatus === 'active' ? 'activate' : 'deactivate';
     try {
-      const response = await fetch(`/api/feedback/templates/${templateId}/${action}/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        fetchTemplates();
-        alert(`Template ${action}d successfully!`);
+      if (newStatus === 'active') {
+        await apiService.activateFeedbackTemplate(templateId);
+      } else if (newStatus === 'closed') {
+        await apiService.closeFeedbackTemplate(templateId);
       } else {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        alert(`Failed to ${action} template`);
+        await apiService.deactivateFeedbackTemplate(templateId);
       }
+      fetchTemplates();
+      alert('Template updated successfully!');
     } catch (error) {
       console.error('Error updating template status:', error);
-      alert(`Failed to ${action} template`);
+      alert('Failed to update template');
     }
   };
 
@@ -400,13 +258,7 @@ const OfficerDashboard = () => {
     if (!confirm('Are you sure you want to delete this template?')) return;
 
     try {
-      await fetch(`/api/feedback/templates/${templateId}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      await apiService.deleteFeedbackTemplate(templateId);
       fetchTemplates();
     } catch (error) {
       console.error('Error deleting template:', error);
@@ -415,12 +267,7 @@ const OfficerDashboard = () => {
 
   const exportResults = async (templateId, format = 'csv') => {
     try {
-      const response = await fetch(`/api/feedback/templates/${templateId}/analytics/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
-      const data = await response.json();
+      const data = await apiService.getFeedbackTemplateAnalytics(templateId);
 
       if (format === 'csv') {
         const csv = convertToCSV(data);

@@ -36,6 +36,56 @@ class SystemLog(models.Model):
         return f"[{self.level}] {self.category}: {self.message[:60]}"
 
 
+class MaintenanceConfiguration(models.Model):
+    singleton_enforcer = models.BooleanField(default=True, unique=True, editable=False)
+    is_enabled = models.BooleanField(default=False)
+    message = models.TextField(
+        blank=True,
+        default='System is currently under maintenance. Please try again later.',
+    )
+    scheduled_start = models.DateTimeField(null=True, blank=True)
+    scheduled_end = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='maintenance_config_updates',
+    )
+
+    class Meta:
+        verbose_name = 'Maintenance Configuration'
+        verbose_name_plural = 'Maintenance Configuration'
+
+    def clean(self):
+        if self.scheduled_start and self.scheduled_end and self.scheduled_end <= self.scheduled_start:
+            raise ValidationError("Scheduled end time must be after scheduled start time.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        config, _ = cls.objects.get_or_create(singleton_enforcer=True)
+        return config
+
+    @property
+    def active_now(self):
+        now = timezone.now()
+        if self.is_enabled:
+            return True
+        if self.scheduled_start and self.scheduled_end:
+            return self.scheduled_start <= now < self.scheduled_end
+        if self.scheduled_start and not self.scheduled_end:
+            return self.scheduled_start <= now
+        return False
+
+    def __str__(self):
+        return "Maintenance Configuration"
+
+
 class EmailLog(models.Model):
     STATUS_CHOICES = [
         ('sent', 'Sent'),
@@ -275,21 +325,26 @@ class User(AbstractBaseUser, PermissionsMixin):
             raise ValidationError("Users with an officer profile must have the officer role.")
 
     def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
-
-    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
         if self.gmail_account:
             self.gmail_account = self.gmail_account.strip().lower()
+        else:
+            self.gmail_account = None
+
+        if self.username:
+            self.username = self.username.strip() or None
+        else:
+            self.username = None
 
         # Backward compatibility for legacy records that still carry super_admin.
         if self.role == 'super_admin':
             self.role = self.ROLE_ADMIN
 
-        if self.role == self.ROLE_ADMIN and not self.is_staff:
-            self.is_staff = True
+        self.is_staff = self.role == self.ROLE_ADMIN or self.is_superuser
 
-        super().save(*args, **kwargs)
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.full_name} | {self.role.upper()}"
@@ -338,7 +393,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.role in [self.ROLE_OFFICER, self.ROLE_ADMIN]
     
     def can_view_all_complaints(self):
-        return self.role in [self.ROLE_OFFICER, self.ROLE_ADMIN]
+        return self.role == self.ROLE_ADMIN
 
     def mark_password_as_local_auth(self):
         if self.auth_provider in [self.AUTH_MICROSOFT, self.AUTH_GOOGLE]:
@@ -348,6 +403,48 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def preferred_notification_email(self):
         return self.gmail_account or self.email
+
+    @property
+    def campus_id(self):
+        student_profile = getattr(self, 'student_profile', None)
+        return student_profile.campus_id if student_profile else None
+
+    @property
+    def user_campus(self):
+        student_profile = getattr(self, 'student_profile', None)
+        if student_profile and student_profile.department_id:
+            college = student_profile.department.department_college
+            return college.college_campus_id if college else None
+
+        officer_profile = getattr(self, 'officer_profile', None)
+        if officer_profile:
+            if officer_profile.college_id:
+                return officer_profile.college.college_campus_id
+            if officer_profile.department_id:
+                return officer_profile.department.department_college.college_campus_id
+        return None
+
+    @property
+    def college(self):
+        student_profile = getattr(self, 'student_profile', None)
+        if student_profile and student_profile.department_id:
+            return student_profile.department.department_college_id
+
+        officer_profile = getattr(self, 'officer_profile', None)
+        if officer_profile:
+            return officer_profile.college_id or (
+                officer_profile.department.department_college_id if officer_profile.department_id else None
+            )
+        return None
+
+    @property
+    def department(self):
+        student_profile = getattr(self, 'student_profile', None)
+        if student_profile:
+            return student_profile.department_id
+
+        officer_profile = getattr(self, 'officer_profile', None)
+        return officer_profile.department_id if officer_profile else None
     
     def get_accessible_complaints(self):
         from complaints.models import Complaint
@@ -355,7 +452,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         if self.can_view_all_complaints():
             return Complaint.objects.all()
         elif self.is_resolver():
-            return Complaint.objects.filter(assigned_officer=self)
+            return Complaint.objects.filter(
+                models.Q(assigned_officer=self) | models.Q(submitted_by=self)
+            ).distinct()
         else:
             return Complaint.objects.filter(submitted_by=self)
 

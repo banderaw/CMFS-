@@ -1,23 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import apiService from '../../services/api';
 
 const FeedbackAnalytics = ({ templateId }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`/api/feedback/templates/${templateId}/analytics/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await apiService.getFeedbackTemplateAnalytics(templateId);
       setAnalytics(data);
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -89,7 +80,7 @@ const FieldAnalytics = ({ data }) => {
                   key={star}
                   className={star <= Math.round(data.average) ? 'opacity-100' : 'opacity-30'}
                 >
-                  ⭐
+                  â­
                 </span>
               ))}
             </div>

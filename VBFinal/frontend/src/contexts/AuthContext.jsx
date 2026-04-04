@@ -71,6 +71,10 @@ export const AuthProvider = ({ children }) => {
 
   const setAuth = (userData, accessToken) => {
     setUser(userData);
+    authService.setAuthData({
+      user: userData,
+      access: accessToken,
+    });
     if (accessToken) {
       apiService.setToken(accessToken);
     }

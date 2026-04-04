@@ -1,7 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import apiService from '../services/api';
 
 const MaintenanceContext = createContext();
+
+const DEFAULT_MESSAGE = 'System is currently under maintenance. Please try again later.';
 
 export const useMaintenanceMode = () => {
   const context = useContext(MaintenanceContext);
@@ -13,92 +16,133 @@ export const useMaintenanceMode = () => {
 
 export const MaintenanceProvider = ({ children }) => {
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
-  const [maintenanceMessage, setMaintenanceMessage] = useState('System is currently under maintenance. Please try again later.');
+  const [maintenanceMessage, setMaintenanceMessage] = useState(DEFAULT_MESSAGE);
   const [scheduledMaintenance, setScheduledMaintenance] = useState(null);
   const [maintenanceEndTime, setMaintenanceEndTime] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Check maintenance status from localStorage on load
-  useEffect(() => {
-    const savedMaintenanceMode = localStorage.getItem('maintenanceMode');
-    const savedMessage = localStorage.getItem('maintenanceMessage');
-    const savedScheduled = localStorage.getItem('scheduledMaintenance');
-    const savedEndTime = localStorage.getItem('maintenanceEndTime');
+  const hydrateState = useCallback((payload) => {
+    const nextMessage = payload?.message || DEFAULT_MESSAGE;
+    const nextScheduledStart = payload?.scheduled_start ? new Date(payload.scheduled_start) : null;
+    const now = new Date();
 
-    if (savedMaintenanceMode === 'true') {
-      setIsMaintenanceMode(true);
-    }
-    if (savedMessage) {
-      setMaintenanceMessage(savedMessage);
-    }
-    if (savedScheduled) {
-      setScheduledMaintenance(JSON.parse(savedScheduled));
-    }
-    if (savedEndTime) {
-      setMaintenanceEndTime(savedEndTime);
+    setIsMaintenanceMode(Boolean(payload?.is_enabled));
+    setMaintenanceMessage(nextMessage);
+    setMaintenanceEndTime(payload?.scheduled_end || null);
+
+    if (nextScheduledStart && nextScheduledStart > now) {
+      setScheduledMaintenance({
+        time: payload.scheduled_start,
+        message: nextMessage,
+      });
+    } else {
+      setScheduledMaintenance(null);
     }
   }, []);
 
-  // Check if maintenance should auto-disable
+  const refreshMaintenanceStatus = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
+
+    try {
+      const payload = await apiService.getMaintenanceStatus();
+      hydrateState(payload);
+    } catch {
+      setIsMaintenanceMode(false);
+      setMaintenanceMessage(DEFAULT_MESSAGE);
+      setScheduledMaintenance(null);
+      setMaintenanceEndTime(null);
+    } finally {
+      if (!silent) {
+        setLoading(false);
+      }
+    }
+  }, [hydrateState]);
+
   useEffect(() => {
-    if (isMaintenanceMode && maintenanceEndTime) {
-      const checkInterval = setInterval(() => {
-        if (new Date() >= new Date(maintenanceEndTime)) {
-          disableMaintenanceMode();
-          clearInterval(checkInterval);
-        }
-      }, 1000);
+    refreshMaintenanceStatus();
+    const interval = setInterval(() => {
+      refreshMaintenanceStatus({ silent: true });
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [refreshMaintenanceStatus]);
 
-      return () => clearInterval(checkInterval);
-    }
-  }, [isMaintenanceMode, maintenanceEndTime]);
+  const enableMaintenanceMode = useCallback(async (message = null, duration = null) => {
+    const startTime = new Date();
+    const endTime = duration
+      ? new Date(startTime.getTime() + duration * 60 * 1000).toISOString()
+      : null;
 
-  const enableMaintenanceMode = (message = null, duration = null) => {
-    setIsMaintenanceMode(true);
-    if (message) {
-      setMaintenanceMessage(message);
-      localStorage.setItem('maintenanceMessage', message);
-    }
+    const payload = await apiService.updateMaintenanceStatus({
+      is_enabled: true,
+      message: message || DEFAULT_MESSAGE,
+      scheduled_start: startTime.toISOString(),
+      scheduled_end: endTime,
+    });
+    hydrateState(payload);
+    return payload;
+  }, [hydrateState]);
 
-    if (duration) {
-      const endTime = new Date(Date.now() + duration * 60 * 1000).toISOString();
-      setMaintenanceEndTime(endTime);
-      localStorage.setItem('maintenanceEndTime', endTime);
-    }
+  const disableMaintenanceMode = useCallback(async () => {
+    const payload = await apiService.updateMaintenanceStatus({
+      is_enabled: false,
+      message: maintenanceMessage || DEFAULT_MESSAGE,
+      scheduled_start: null,
+      scheduled_end: null,
+    });
+    hydrateState(payload);
+    return payload;
+  }, [hydrateState, maintenanceMessage]);
 
-    localStorage.setItem('maintenanceMode', 'true');
-  };
+  const updateMaintenanceConfiguration = useCallback(async (updates) => {
+    const payload = await apiService.updateMaintenanceStatus(updates);
+    hydrateState(payload);
+    return payload;
+  }, [hydrateState]);
 
-  const disableMaintenanceMode = () => {
-    setIsMaintenanceMode(false);
-    setScheduledMaintenance(null);
-    setMaintenanceEndTime(null);
-    localStorage.setItem('maintenanceMode', 'false');
-    localStorage.removeItem('scheduledMaintenance');
-    localStorage.removeItem('maintenanceEndTime');
-  };
+  const scheduleMaintenanceMode = useCallback(async (scheduledTime, message = null, duration = null) => {
+    const startTime = new Date(scheduledTime);
+    const endTime = duration
+      ? new Date(startTime.getTime() + duration * 60 * 1000).toISOString()
+      : null;
 
-  const scheduleMaintenanceMode = (scheduledTime, message = null) => {
-    const scheduled = {
-      time: scheduledTime,
-      message: message || `Scheduled maintenance at ${new Date(scheduledTime).toLocaleString()}`
-    };
-    setScheduledMaintenance(scheduled);
-    localStorage.setItem('scheduledMaintenance', JSON.stringify(scheduled));
-  };
+    const payload = await apiService.updateMaintenanceStatus({
+      is_enabled: false,
+      message: message || `Scheduled maintenance at ${startTime.toLocaleString()}`,
+      scheduled_start: startTime.toISOString(),
+      scheduled_end: endTime,
+    });
+    hydrateState(payload);
+    return payload;
+  }, [hydrateState]);
 
-  const value = {
-    isMaintenanceMode,
-    maintenanceMessage,
-    scheduledMaintenance,
-    maintenanceEndTime,
-    enableMaintenanceMode,
-    disableMaintenanceMode,
-    scheduleMaintenanceMode
-  };
-
-  return (
-    <MaintenanceContext.Provider value={value}>
-      {children}
-    </MaintenanceContext.Provider>
+  const value = useMemo(
+    () => ({
+      isMaintenanceMode,
+      maintenanceMessage,
+      scheduledMaintenance,
+      maintenanceEndTime,
+      loading,
+      refreshMaintenanceStatus,
+      enableMaintenanceMode,
+      disableMaintenanceMode,
+      updateMaintenanceConfiguration,
+      scheduleMaintenanceMode,
+    }),
+    [
+      disableMaintenanceMode,
+      enableMaintenanceMode,
+      isMaintenanceMode,
+      loading,
+      maintenanceEndTime,
+      maintenanceMessage,
+      refreshMaintenanceStatus,
+      scheduleMaintenanceMode,
+      scheduledMaintenance,
+      updateMaintenanceConfiguration,
+    ],
   );
+
+  return <MaintenanceContext.Provider value={value}>{children}</MaintenanceContext.Provider>;
 };

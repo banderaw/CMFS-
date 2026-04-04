@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import apiService from '../../services/api';
 
 const FIELD_TYPES = [
-  { type: 'text', label: 'Text Input', icon: '📝' },
-  { type: 'number', label: 'Number Input', icon: '🔢' },
-  { type: 'rating', label: 'Rating Scale', icon: '⭐' },
-  { type: 'choice', label: 'Multiple Choice', icon: '🔘' },
-  { type: 'checkbox', label: 'Checkboxes', icon: '☑️' }
+  { type: 'text', label: 'Text Input', icon: 'ðŸ“' },
+  { type: 'number', label: 'Number Input', icon: 'ðŸ”¢' },
+  { type: 'rating', label: 'Rating Scale', icon: 'â­' },
+  { type: 'choice', label: 'Multiple Choice', icon: 'ðŸ”˜' },
+  { type: 'checkbox', label: 'Checkboxes', icon: 'â˜‘ï¸' }
 ];
 
 const FeedbackFormBuilder = ({ onSave }) => {
@@ -67,44 +68,12 @@ const FeedbackFormBuilder = ({ onSave }) => {
     };
 
     try {
-
-      const response = await fetch('/api/feedback/templates/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(templateData)
-      });
-
-
-      if (response.ok) {
-        onSave && onSave();
-        alert('Feedback form created successfully!');
-      } else {
-        // Handle different response types
-        const contentType = response.headers.get('content-type');
-        let errorMessage = 'Failed to create form';
-
-        try {
-          if (contentType && contentType.includes('application/json')) {
-            const error = await response.json();
-            errorMessage = error.detail || error.message || 'Failed to create form';
-          } else {
-            const errorText = await response.text();
-            console.error('Server error response:', errorText);
-            errorMessage = `Server error (${response.status}): ${response.statusText}`;
-          }
-        } catch (parseError) {
-          console.error('Error parsing response:', parseError);
-          errorMessage = `Server error (${response.status}): ${response.statusText}`;
-        }
-
-        alert(errorMessage);
-      }
+      await apiService.createFeedbackTemplate(templateData);
+      onSave && onSave();
+      alert('Feedback form created successfully!');
     } catch (error) {
       console.error('Error saving form:', error);
-      alert('Failed to create form');
+      alert(error.message || 'Failed to create form');
     }
   };
 
@@ -211,14 +180,14 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
             disabled={index === 0}
             className="px-2 py-1 bg-gray-500 text-white rounded disabled:opacity-50"
           >
-            ↑
+            â†‘
           </button>
           <button
             onClick={() => onMove('down')}
             disabled={index === totalFields - 1}
             className="px-2 py-1 bg-gray-500 text-white rounded disabled:opacity-50"
           >
-            ↓
+            â†“
           </button>
           <label className="flex items-center">
             <input
@@ -229,7 +198,7 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
             />
             Required
           </label>
-          <button onClick={onRemove} className="text-lg">❌</button>
+          <button onClick={onRemove} className="text-lg">âŒ</button>
         </div>
       </div>
 
@@ -277,7 +246,7 @@ const FieldPreview = ({ field }) => {
       return (
         <div className="flex">
           {[1, 2, 3, 4, 5].map(star => (
-            <span key={star} className="text-2xl">⭐</span>
+            <span key={star} className="text-2xl">â­</span>
           ))}
         </div>
       );

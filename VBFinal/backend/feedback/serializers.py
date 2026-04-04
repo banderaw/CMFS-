@@ -48,10 +48,21 @@ class FeedbackTemplateCreateSerializer(serializers.ModelSerializer):
         else:
             status = FeedbackTemplate.STATUS_PENDING
         
+        office_name = 'General'
+        officer_profile = getattr(user, 'officer_profile', None)
+        student_profile = getattr(user, 'student_profile', None)
+        if officer_profile:
+            if officer_profile.department_id:
+                office_name = officer_profile.department.department_name or office_name
+            elif officer_profile.college_id:
+                office_name = officer_profile.college.college_name or office_name
+        elif student_profile and student_profile.department_id:
+            office_name = student_profile.department.department_name or office_name
+
         template = FeedbackTemplate.objects.create(
             **validated_data,
             created_by=user,
-            office=user.college or 'General',
+            office=office_name,
             status=status
         )
         

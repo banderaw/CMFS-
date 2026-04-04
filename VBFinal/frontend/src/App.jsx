@@ -109,7 +109,7 @@ function App() {
         <MaintenanceProvider>
           <AuthProvider>
             <TokenInterceptor>
-              <Router>
+              <Router future={{ v7_relativeSplatPath: true }}>
                 <div className="App min-h-screen bg-inherit pt-20 pb-56">
                   <AppContent />
                 </div>

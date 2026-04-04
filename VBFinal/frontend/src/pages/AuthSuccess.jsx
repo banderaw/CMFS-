@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+import authService from '../services/auth';
+import apiService from '../services/api';
 
 const AuthSuccess = () => {
   const navigate = useNavigate();
@@ -14,24 +14,12 @@ const AuthSuccess = () => {
     const refresh = searchParams.get('refresh');
 
     if (access && refresh) {
-      localStorage.setItem('token', access);
-      localStorage.setItem('refresh', refresh);
+      authService.setAuthData({ access, refresh });
+      apiService.setToken(access);
 
-      // Fetch user data
-      fetch(`${API_BASE}/accounts/me/`, {
-        headers: {
-          'Authorization': `Bearer ${access}`
-        }
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Failed to fetch user data: ${res.status} ${text}`);
-          }
-          return res.json();
-        })
+      apiService.getCurrentUserProfile()
         .then(userData => {
-          localStorage.setItem('user', JSON.stringify(userData));
+          authService.setAuthData({ access, refresh, user: userData });
           setAuth(userData, access);
 
           // Role-based redirection
@@ -44,9 +32,7 @@ const AuthSuccess = () => {
             navigate('/user');
           }
         })
-        .catch((err) => {
-          console.error("Auth Success Error:", err);
-          // navigate('/login?error=auth_failed'); // Don't redirect immediately on error, let user see it or handle gracefully
+        .catch(() => {
           alert("Authentication successful, but failed to load user profile. Please try logging in again.");
           navigate('/login');
         });

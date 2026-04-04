@@ -17,11 +17,6 @@ const ResetPassword = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  // Log token on mount for debugging
-  React.useEffect(() => {
-    console.log('Reset token from URL:', token ? `${token.substring(0, 20)}...` : 'MISSING');
-  }, [token]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -44,7 +39,6 @@ const ResetPassword = () => {
 
     setLoading(true);
     try {
-      console.log('Submitting password reset with token:', token ? `${token.substring(0, 20)}...` : 'EMPTY');
       await apiService.resetPassword(token, password);
       setMessage('Password reset successful. Redirecting to login...');
       setTimeout(() => navigate('/login'), 1400);

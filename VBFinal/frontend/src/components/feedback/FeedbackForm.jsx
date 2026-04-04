@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import apiService from '../../services/api';
 
 const FeedbackForm = ({ templateId, onSubmit }) => {
   const [template, setTemplate] = useState(null);
@@ -7,16 +8,13 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
   const [submitting, setSubmitting] = useState(false);
 
   const fetchTemplate = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`/api/feedback/templates/${templateId}/`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
+      const data = await apiService.getFeedbackTemplate(templateId);
       setTemplate(data);
     } catch (error) {
       console.error('Error fetching template:', error);
+      setTemplate(null);
     } finally {
       setLoading(false);
     }
@@ -49,7 +47,7 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
           answer.number_value = parseFloat(value) || null;
           break;
         case 'rating':
-          answer.rating_value = parseInt(value) || null;
+          answer.rating_value = parseInt(value, 10) || null;
           break;
         case 'choice':
           answer.choice_value = value || '';
@@ -57,29 +55,22 @@ const FeedbackForm = ({ templateId, onSubmit }) => {
         case 'checkbox':
           answer.checkbox_values = value || [];
           break;
+        default:
+          break;
       }
       return answer;
     });
 
     try {
-      const response = await fetch('/api/feedback/responses/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          template: templateId,
-          answers: formattedAnswers
-        })
+      await apiService.submitFeedbackResponse({
+        template: templateId,
+        answers: formattedAnswers
       });
-
-      if (response.ok) {
-        onSubmit && onSubmit();
-        alert('Feedback submitted successfully!');
-      }
+      onSubmit && onSubmit();
+      alert('Feedback submitted successfully!');
     } catch (error) {
       console.error('Error submitting feedback:', error);
+      alert('Failed to submit feedback');
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +148,7 @@ const FieldInput = ({ field, value, onChange }) => {
               className={`text-2xl transition-opacity ${value >= star ? 'opacity-100' : 'opacity-30'} hover:opacity-70`}
               onClick={() => onChange(star)}
             >
-              ⭐
+              â­
             </button>
           ))}
         </div>

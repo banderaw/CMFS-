@@ -1,6 +1,18 @@
 const AUTH_API_URL = `${import.meta.env.VITE_API_URL || "/api"}/accounts`;
 
 class AuthService {
+  setAuthData(data) {
+    if (data?.access) {
+      localStorage.setItem('token', data.access);
+    }
+    if (data?.refresh) {
+      localStorage.setItem('refresh', data.refresh);
+    }
+    if (data?.user) {
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
+  }
+
   async login(identifier, password) {
     try {
       const response = await fetch(`${AUTH_API_URL}/login/`, {
@@ -18,9 +30,7 @@ class AuthService {
       }
 
       if (data.access) {
-        localStorage.setItem('token', data.access);
-        localStorage.setItem('refresh', data.refresh);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        this.setAuthData(data);
         return data;
       }
 
@@ -48,9 +58,7 @@ class AuthService {
       }
 
       if (data.access) {
-        localStorage.setItem('token', data.access);
-        localStorage.setItem('refresh', data.refresh);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        this.setAuthData(data);
         return data;
       }
 

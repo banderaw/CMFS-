@@ -3,7 +3,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import apiService from '../../services/api';
 
-const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
+const SubmitComplaint = ({ setSubmitSuccess }) => {
   const { isDark } = useTheme();
   const { language, t } = useLanguage();
   const [loading, setLoading] = useState(false);
@@ -11,13 +11,14 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
   const [complaintForm, setComplaintForm] = useState({
     title: '',
     description: '',
-    institution: '',
     category: ''
   });
   const [files, setFiles] = useState([]);
   const [formErrors, setFormErrors] = useState({});
+  const [currentStep, setCurrentStep] = useState(1);
   const [officers, setOfficers] = useState([]);
   const [ccOfficerIds, setCcOfficerIds] = useState([]);
+  const totalSteps = 4;
 
   const loadCategories = useCallback(async () => {
     try {
@@ -40,14 +41,42 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
     const errors = {};
     if (!complaintForm.title.trim()) errors.title = t('required');
     if (!complaintForm.description.trim()) errors.description = t('required');
-    if (!complaintForm.institution) errors.institution = t('required');
     if (!complaintForm.category) errors.category = t('required');
     if (complaintForm.description.length > 500) {
       errors.description = language === 'am' ? 'መግለጫው ከ500 ቁምፊዎች በታች መሆን አለበት' : 'Description must be under 500 characters';
     }
 
     setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
+  };
+
+  const clearForm = () => {
+    setComplaintForm({ title: '', description: '', category: '' });
+    setFiles([]);
+    setCcOfficerIds([]);
+    setFormErrors({});
+    setCurrentStep(1);
+  };
+
+  const validateStep = (step) => {
+    const errors = validateForm();
+    if (step === 1) {
+      return !errors.title && !errors.description;
+    }
+    if (step === 2) {
+      return !errors.category;
+    }
+    return true;
+  };
+
+  const goToNextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep((prev) => Math.min(totalSteps, prev + 1));
+    }
+  };
+
+  const goToPreviousStep = () => {
+    setCurrentStep((prev) => Math.max(1, prev - 1));
   };
 
   const handleFileChange = (e) => {
@@ -82,14 +111,21 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
 
   const submitComplaint = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      if (errors.title || errors.description) {
+        setCurrentStep(1);
+      } else if (errors.category) {
+        setCurrentStep(2);
+      }
+      return;
+    }
 
     setLoading(true);
     try {
       const formData = new FormData();
       formData.append('title', complaintForm.title);
       formData.append('description', complaintForm.description);
-      formData.append('institution', complaintForm.institution);
       formData.append('category', complaintForm.category);
 
       // CC officers as JSON
@@ -105,10 +141,7 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
       const response = await apiService.createComplaint(formData);
 
       if (response) {
-        setComplaintForm({ title: '', description: '', institution: '', category: '' });
-        setFiles([]);
-        setCcOfficerIds([]);
-        setFormErrors({});
+        clearForm();
         setSubmitSuccess(true);
 
         // Hide success message after 5 seconds
@@ -147,199 +180,248 @@ const SubmitComplaint = ({ institutions, setSubmitSuccess }) => {
           <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {t('submit_new_complaint')}
           </h3>
-          {/* <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
-            🤖 {t('ai_will_detect')}
-          </p> */}
         </div>
 
         <div className="p-6">
           <form onSubmit={submitComplaint} className="space-y-6">
-            <div>
-              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {t('title')} *
-              </label>
-              <input
-                type="text"
-                value={complaintForm.title}
-                onChange={(e) => setComplaintForm({ ...complaintForm, title: e.target.value })}
-                className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'} ${formErrors.title ? 'border-red-500' : ''}`}
-                placeholder={t('brief_title')}
-              />
-              {formErrors.title && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.title}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {t('description')} *
-              </label>
-              <textarea
-                value={complaintForm.description}
-                onChange={(e) => setComplaintForm({ ...complaintForm, description: e.target.value })}
-                rows={5}
-                className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'} ${formErrors.description ? 'border-red-500' : ''}`}
-                placeholder={t('detailed_description')}
-              />
-              <div className="flex justify-between items-center mt-1">
-                {formErrors.description && <p className="text-red-500 text-sm flex items-center"><span className="mr-1">⚠️</span>{formErrors.description}</p>}
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} ml-auto`}>
-                  {complaintForm.description.length}/500
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {t('institution')} *
-              </label>
-              <select
-                value={complaintForm.institution}
-                onChange={(e) => setComplaintForm({ ...complaintForm, institution: e.target.value })}
-                className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} ${formErrors.institution ? 'border-red-500' : ''}`}
-              >
-                <option value="">{t('select_institution')}</option>
-                {institutions.map((institution) => (
-                  <option key={institution.id} value={institution.id}>
-                    {institution.name}
-                  </option>
-                ))}
-              </select>
-              {formErrors.institution && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.institution}</p>}
-            </div>
-
-            <div>
-              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {language === 'am' ? 'ምድብ' : 'Category'} *
-              </label>
-              <select
-                value={complaintForm.category}
-                onChange={(e) => setComplaintForm({ ...complaintForm, category: e.target.value })}
-                className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} ${formErrors.category ? 'border-red-500' : ''}`}
-              >
-                <option value="">{language === 'am' ? 'ምድብ ይምረጡ' : 'Select category'}</option>
-                {categories.map((cat) => (
-                  <option key={cat.category_id} value={cat.category_id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-              {formErrors.category && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.category}</p>}
-            </div>
-
-            {/* CC */}
-            <div>
-              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {language === 'am' ? 'CC ኦፊሰሮች ይምረጡ' : 'CC Officers (Select one or more)'}
-              </label>
-              <div className={`w-full border rounded-lg px-3 py-3 max-h-52 overflow-y-auto ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
-                {officers.length === 0 ? (
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {language === 'am' ? 'ኦፊሰሮች አልተገኙም' : 'No officers found'}
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {officers.map((officer) => (
-                      <label key={officer.id} className={`flex items-start gap-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                        <input
-                          type="checkbox"
-                          checked={ccOfficerIds.includes(officer.id)}
-                          onChange={() => toggleCcOfficer(officer.id)}
-                        />
-                        <span>{officer.first_name} {officer.last_name} ({officer.email})</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                {language === 'am'
-                  ? `የተመረጡ ኦፊሰሮች: ${ccOfficerIds.length}`
-                  : `Selected officers: ${ccOfficerIds.length}`}
+            <div className="flex items-center justify-between">
+              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                {language === 'am' ? `ደረጃ ${currentStep} / ${totalSteps}` : `Step ${currentStep} of ${totalSteps}`}
               </p>
-            </div>
-
-            {/* File Upload */}
-            <div>
-              <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                {language === 'am' ? 'ፋይሎች አያይዝ (አማራጭ)' : 'Attach Files (Optional)'}
-              </label>
-              <div className={`border-2 border-dashed rounded-lg p-6 text-center ${isDark ? 'border-gray-600 bg-gray-750' : 'border-gray-300 bg-gray-50'}`}>
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                  accept=".jpg,.jpeg,.png,.gif,.pdf,.txt,.doc,.docx"
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <div className="text-4xl mb-2">📎</div>
-                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {language === 'am'
-                      ? 'ፋይሎችን ለመጫን ይጫኑ ወይም እዚህ ይጎትቱ'
-                      : 'Click to upload files or drag and drop'
-                    }
-                  </p>
-                  <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                    {language === 'am'
-                      ? 'ከ5MB በታች ያሉ ምስሎች፣ PDF፣ ሰነዶች (ከ5 ፋይሎች በታች)'
-                      : 'Images, PDFs, Documents under 5MB (Max 5 files)'
-                    }
-                  </p>
-                </label>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 4].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-2 w-10 rounded-full ${step <= currentStep ? 'bg-blue-600' : isDark ? 'bg-gray-700' : 'bg-gray-200'}`}
+                  />
+                ))}
               </div>
-
-              {/* File List */}
-              {files.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {files.map((file, index) => (
-                    <div key={index} className={`flex items-center justify-between p-3 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">{getFileIcon(file)}</span>
-                        <div>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            {file.name}
-                          </p>
-                          <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {formatFileSize(file.size)}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(index)}
-                        className="text-red-500 hover:text-red-700 p-1"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            <div className="flex justify-end space-x-4 pt-4">
+            {currentStep === 1 && (
+              <div className="space-y-6">
+                <h4 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {language === 'am' ? '1. የቅሬታ ዝርዝሮች' : '1. Complaint Details'}
+                </h4>
+                <div>
+                  <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    {t('title')} *
+                  </label>
+                  <input
+                    type="text"
+                    value={complaintForm.title}
+                    onChange={(e) => setComplaintForm({ ...complaintForm, title: e.target.value })}
+                    className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'} ${formErrors.title ? 'border-red-500' : ''}`}
+                    placeholder={t('brief_title')}
+                  />
+                  {formErrors.title && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.title}</p>}
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    {t('description')} *
+                  </label>
+                  <textarea
+                    value={complaintForm.description}
+                    onChange={(e) => setComplaintForm({ ...complaintForm, description: e.target.value })}
+                    rows={5}
+                    className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'} ${formErrors.description ? 'border-red-500' : ''}`}
+                    placeholder={t('detailed_description')}
+                  />
+                  <div className="flex justify-between items-center mt-1">
+                    {formErrors.description && <p className="text-red-500 text-sm flex items-center"><span className="mr-1">⚠️</span>{formErrors.description}</p>}
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} ml-auto`}>
+                      {complaintForm.description.length}/500
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                <h4 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {language === 'am' ? '2. ምድብ እና ተዛማጅ መረጃ' : '2. Classification'}
+                </h4>
+
+                <div>
+                  <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    {language === 'am' ? 'ምድብ' : 'Category'} *
+                  </label>
+                  <select
+                    value={complaintForm.category}
+                    onChange={(e) => setComplaintForm({ ...complaintForm, category: e.target.value })}
+                    className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} ${formErrors.category ? 'border-red-500' : ''}`}
+                  >
+                    <option value="">{language === 'am' ? 'ምድብ ይምረጡ' : 'Select category'}</option>
+                    {categories.map((cat) => (
+                      <option key={cat.category_id} value={cat.category_id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  {formErrors.category && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.category}</p>}
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    {language === 'am' ? 'CC ኦፊሰሮች ይምረጡ' : 'CC Officers (Select one or more)'}
+                  </label>
+                  <div className={`w-full border rounded-lg px-3 py-3 max-h-52 overflow-y-auto ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
+                    {officers.length === 0 ? (
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {language === 'am' ? 'ኦፊሰሮች አልተገኙም' : 'No officers found'}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {officers.map((officer) => (
+                          <label key={officer.id} className={`flex items-start gap-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                            <input
+                              type="checkbox"
+                              checked={ccOfficerIds.includes(officer.id)}
+                              onChange={() => toggleCcOfficer(officer.id)}
+                            />
+                            <span>{officer.first_name} {officer.last_name} ({officer.email})</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                    {language === 'am'
+                      ? `የተመረጡ ኦፊሰሮች: ${ccOfficerIds.length}`
+                      : `Selected officers: ${ccOfficerIds.length}`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {currentStep === 3 && (
+              <div className="space-y-6">
+                <h4 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {language === 'am' ? '3. ማስረጃ ፋይሎች' : '3. Evidence Attachments'}
+                </h4>
+                <div>
+                  <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    {language === 'am' ? 'ፋይሎች አያይዝ (አማራጭ)' : 'Attach Files (Optional)'}
+                  </label>
+                  <div className={`border-2 border-dashed rounded-lg p-6 text-center ${isDark ? 'border-gray-600 bg-gray-750' : 'border-gray-300 bg-gray-50'}`}>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="file-upload"
+                      accept=".jpg,.jpeg,.png,.gif,.pdf,.txt,.doc,.docx"
+                    />
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      <div className="text-4xl mb-2">📎</div>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {language === 'am'
+                          ? 'ፋይሎችን ለመጫን ይጫኑ ወይም እዚህ ይጎትቱ'
+                          : 'Click to upload files or drag and drop'
+                        }
+                      </p>
+                      <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
+                        {language === 'am'
+                          ? 'ከ5MB በታች ያሉ ምስሎች፣ PDF፣ ሰነዶች (ከ5 ፋይሎች በታች)'
+                          : 'Images, PDFs, Documents under 5MB (Max 5 files)'
+                        }
+                      </p>
+                    </label>
+                  </div>
+
+                  {files.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      {files.map((file, index) => (
+                        <div key={index} className={`flex items-center justify-between p-3 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="flex items-center space-x-3">
+                            <span className="text-lg">{getFileIcon(file)}</span>
+                            <div>
+                              <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {file.name}
+                              </p>
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {formatFileSize(file.size)}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {currentStep === 4 && (
+              <div className="space-y-6">
+                <h4 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {language === 'am' ? '4. ክለሳ እና ማስገባት' : '4. Review & Submit'}
+                </h4>
+                <div className={`rounded-lg border p-4 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className="space-y-3 text-sm">
+                    <p><span className="font-semibold">{t('title')}:</span> {complaintForm.title || '-'}</p>
+                    <p><span className="font-semibold">{t('description')}:</span> {complaintForm.description || '-'}</p>
+                    <p>
+                      <span className="font-semibold">{language === 'am' ? 'ምድብ' : 'Category'}:</span>{' '}
+                      {categories.find((item) => String(item.category_id) === String(complaintForm.category))?.name || '-'}
+                    </p>
+                    <p><span className="font-semibold">{language === 'am' ? 'CC ኦፊሰሮች' : 'CC Officers'}:</span> {ccOfficerIds.length}</p>
+                    <p><span className="font-semibold">{language === 'am' ? 'ፋይሎች' : 'Attachments'}:</span> {files.length}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-4">
               <button
                 type="button"
-                onClick={() => {
-                  setComplaintForm({ title: '', description: '', institution: '', category: '' });
-                  setFiles([]);
-                  setCcOfficerIds([]);
-                  setFormErrors({});
-                }}
+                onClick={clearForm}
                 className={`px-6 py-3 rounded-lg font-medium transition-colors ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               >
                 {t('cancel')}
               </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                {loading && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+
+              <div className="flex items-center gap-3">
+                {currentStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={goToPreviousStep}
+                    className={`px-6 py-3 rounded-lg font-medium transition-colors ${isDark ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+                  >
+                    {language === 'am' ? 'ወደ ኋላ' : 'Back'}
+                  </button>
                 )}
-                <span>{loading ? t('loading') : t('submit')}</span>
-              </button>
+
+                {currentStep < totalSteps ? (
+                  <button
+                    type="button"
+                    onClick={goToNextStep}
+                    className="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    {language === 'am' ? 'ቀጣይ' : 'Next'}
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {loading && (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    )}
+                    <span>{loading ? t('loading') : t('submit')}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </form>
         </div>

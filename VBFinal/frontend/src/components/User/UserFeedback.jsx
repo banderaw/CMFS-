@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import apiService from '../../services/api';
 
 const UserFeedback = () => {
   const [templates, setTemplates] = useState([]);
@@ -14,39 +15,12 @@ const UserFeedback = () => {
 
   const fetchActiveTemplates = async () => {
     try {
-      const response = await fetch('/api/feedback/templates/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      // Handle different response formats
-      let templateList = [];
-      if (Array.isArray(data)) {
-        templateList = data;
-      } else if (data.results && Array.isArray(data.results)) {
-        templateList = data.results;
-      } else {
-        console.warn('Unexpected response format:', data);
-        templateList = [];
-      }
-      
-      const activeTemplates = templateList.filter(t => t.status === 'active');
-      setTemplates(activeTemplates);
-      
-      if (activeTemplates.length === 0) {
-        console.log('No active feedback templates found');
-      }
+      const data = await apiService.getFeedbackTemplates();
+      const templateList = Array.isArray(data) ? data : data.results || [];
+      setTemplates(templateList.filter(template => template.status === 'active'));
     } catch (error) {
       console.error('Error fetching templates:', error);
-      setTemplates([]); // Set empty array on error
+      setTemplates([]);
     } finally {
       setLoading(false);
     }
@@ -81,7 +55,7 @@ const UserFeedback = () => {
           answer.number_value = parseFloat(value) || null;
           break;
         case 'rating':
-          answer.rating_value = parseInt(value) || null;
+          answer.rating_value = parseInt(value, 10) || null;
           break;
         case 'choice':
           answer.choice_value = value || '';
@@ -89,32 +63,22 @@ const UserFeedback = () => {
         case 'checkbox':
           answer.checkbox_values = value || [];
           break;
+        default:
+          break;
       }
+
       return answer;
     });
 
     try {
-      const response = await fetch('/api/feedback/responses/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          template: selectedTemplate.id,
-          answers: formattedAnswers
-        })
+      await apiService.submitFeedbackResponse({
+        template: selectedTemplate.id,
+        answers: formattedAnswers
       });
-
-      if (response.ok) {
-        setCurrentView('success');
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Failed to submit feedback');
-      }
+      setCurrentView('success');
     } catch (error) {
       console.error('Error submitting feedback:', error);
-      alert('Failed to submit feedback');
+      alert(error.message || 'Failed to submit feedback');
     } finally {
       setSubmitting(false);
     }
@@ -129,11 +93,11 @@ const UserFeedback = () => {
   if (currentView === 'form' && selectedTemplate) {
     return (
       <div className="p-6">
-        <button 
+        <button
           onClick={handleBackToList}
           className="mb-6 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
         >
-          ← Back to Forms
+          â† Back to Forms
         </button>
 
         <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-8">
@@ -154,7 +118,7 @@ const UserFeedback = () => {
                   {field.label}
                   {field.is_required && <span className="text-red-500 ml-1">*</span>}
                 </label>
-                
+
                 <FieldInput
                   field={field}
                   value={answers[field.id]}
@@ -164,8 +128,8 @@ const UserFeedback = () => {
             ))}
 
             <div className="pt-6">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={submitting}
                 className="w-full py-4 bg-blue-600 text-white text-lg font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
@@ -183,10 +147,10 @@ const UserFeedback = () => {
       <div className="p-6">
         <div className="max-w-2xl mx-auto text-center">
           <div className="bg-green-50 border border-green-200 rounded-lg p-8">
-            <div className="text-6xl mb-4">✅</div>
+            <div className="text-6xl mb-4">âœ…</div>
             <h2 className="text-2xl font-bold text-green-800 mb-4">Thank You!</h2>
             <p className="text-green-700 mb-6">Your feedback has been submitted successfully.</p>
-            <button 
+            <button
               onClick={handleBackToList}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
             >
@@ -224,10 +188,10 @@ const UserFeedback = () => {
 
               <div className="text-sm text-gray-500 mb-4">
                 <p>Fields: {template.fields?.length || 0}</p>
-                <p>Created by: {template.created_by_name}</p>
+                <p>Created by: {template.created_by || 'System'}</p>
               </div>
 
-              <button 
+              <button
                 onClick={() => handleSelectTemplate(template)}
                 className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
               >
@@ -240,7 +204,7 @@ const UserFeedback = () => {
 
       {templates.length === 0 && !loading && (
         <div className="text-center py-16 text-gray-600">
-          <div className="text-6xl mb-4">📝</div>
+          <div className="text-6xl mb-4">ðŸ“</div>
           <p className="text-xl mb-2">No feedback forms available</p>
           <p>Check back later for new forms from your office</p>
         </div>
@@ -285,7 +249,7 @@ const FieldInput = ({ field, value, onChange }) => {
               }`}
               onClick={() => onChange(star)}
             >
-              ⭐
+              â­
             </button>
           ))}
           {value && (

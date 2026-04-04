@@ -1,34 +1,29 @@
-from django.shortcuts import render
+from datetime import timedelta
 
-from rest_framework import viewsets, status, permissions
+from django.db.models import Avg, Count
+from django.utils import timezone
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Count, Avg, Q
-from django.utils import timezone
-from datetime import timedelta
-from collections import defaultdict
-from .models import FeedbackTemplate, TemplateField, FeedbackResponse, FeedbackAnswer
+
+from .models import FeedbackAnswer, FeedbackResponse, FeedbackTemplate, TemplateField
 from .serializers import (
-    FeedbackTemplateSerializer, 
-    FeedbackTemplateCreateSerializer,
+    FeedbackAnalyticsSerializer,
     FeedbackResponseSerializer,
-    FeedbackAnalyticsSerializer
+    FeedbackTemplateCreateSerializer,
+    FeedbackTemplateSerializer,
 )
 
 
 class FeedbackTemplateViewSet(viewsets.ModelViewSet):
     queryset = FeedbackTemplate.objects.all()
-    
+    permission_classes = [permissions.IsAuthenticated]
+
     def get_serializer_class(self):
         if self.action == 'create':
             return FeedbackTemplateCreateSerializer
         return FeedbackTemplateSerializer
-    
-    def get_permissions(self):
-        # Temporarily allow all authenticated users for testing
-        permission_classes = [permissions.IsAuthenticated]
-        return [permission() for permission in permission_classes]
-    
+
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return FeedbackTemplate.objects.none()
@@ -36,148 +31,141 @@ class FeedbackTemplateViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return FeedbackTemplate.objects.none()
-
-        # For now, allow all authenticated users to see templates for testing
         if user.is_admin():
             return FeedbackTemplate.objects.all()
-        elif user.is_officer():
+        if user.is_officer():
             return FeedbackTemplate.objects.filter(created_by=user)
-        else:
-            # Allow regular users to see active templates
-            return FeedbackTemplate.objects.filter(status=FeedbackTemplate.STATUS_ACTIVE)
-    
+        return FeedbackTemplate.objects.filter(status=FeedbackTemplate.STATUS_ACTIVE)
+
+    def _can_manage_template(self, user, template):
+        if not user.is_authenticated:
+            return False
+        if user.is_admin():
+            return True
+        return user.is_officer() and template.created_by_id == user.id
+
     def perform_create(self, serializer):
-        # Allow both officers and admins to create templates
         if not (self.request.user.is_officer() or self.request.user.is_admin()):
-            raise permissions.PermissionDenied("Only officers and admins can create feedback templates")
+            raise permissions.PermissionDenied('Only officers and admins can create feedback templates')
         serializer.save()
-    
+
     def perform_update(self, serializer):
-        if not self.request.user.is_officer():
-            raise permissions.PermissionDenied("Only officers can update feedback templates")
+        template = self.get_object()
+        if not self._can_manage_template(self.request.user, template):
+            raise permissions.PermissionDenied('You do not have permission to update this template')
         serializer.save()
-    
+
     def perform_destroy(self, instance):
-        # Allow both officers and admins to delete templates
-        if not (self.request.user.is_officer() or self.request.user.is_admin()):
-            raise permissions.PermissionDenied("Only officers and admins can delete feedback templates")
+        if not self._can_manage_template(self.request.user, instance):
+            raise permissions.PermissionDenied('You do not have permission to delete this template')
         instance.delete()
-    
+
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         template = self.get_object()
-        if not (request.user.is_officer() or request.user.is_admin()):
-            return Response(
-                {"error": "Only officers and admins can activate templates"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+        if not self._can_manage_template(request.user, template):
+            return Response({'error': 'You do not have permission to activate this template'}, status=status.HTTP_403_FORBIDDEN)
+
         template.status = FeedbackTemplate.STATUS_ACTIVE
-        template.save()
-        return Response({"message": "Template activated successfully"})
-    
+        template.save(update_fields=['status', 'updated_at'])
+        return Response({'message': 'Template activated successfully'})
+
     @action(detail=True, methods=['post'])
     def deactivate(self, request, pk=None):
         template = self.get_object()
-        if not (request.user.is_officer() or request.user.is_admin()):
-            return Response(
-                {"error": "Only officers and admins can deactivate templates"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+        if not self._can_manage_template(request.user, template):
+            return Response({'error': 'You do not have permission to deactivate this template'}, status=status.HTTP_403_FORBIDDEN)
+
         template.status = FeedbackTemplate.STATUS_INACTIVE
-        template.save()
-        return Response({"message": "Template deactivated successfully"})
-    
+        template.save(update_fields=['status', 'updated_at'])
+        return Response({'message': 'Template deactivated successfully'})
+
+    @action(detail=True, methods=['post'])
+    def close(self, request, pk=None):
+        template = self.get_object()
+        if not self._can_manage_template(request.user, template):
+            return Response({'error': 'You do not have permission to close this template'}, status=status.HTTP_403_FORBIDDEN)
+
+        template.status = FeedbackTemplate.STATUS_CLOSED
+        template.save(update_fields=['status', 'updated_at'])
+        return Response({'message': 'Template closed successfully'})
+
     @action(detail=True, methods=['post', 'patch'])
     def approve(self, request, pk=None):
         template = self.get_object()
         if not request.user.is_admin():
-            return Response(
-                {"error": "Only admins can approve templates"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+            return Response({'error': 'Only admins can approve templates'}, status=status.HTTP_403_FORBIDDEN)
+
         template.status = FeedbackTemplate.STATUS_ACTIVE
         template.approved_by = request.user
         template.approved_at = timezone.now()
-        template.save()
-        return Response({"message": "Template approved successfully"})
-    
+        template.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+        return Response({'message': 'Template approved successfully'})
+
     @action(detail=True, methods=['post', 'patch'])
     def reject(self, request, pk=None):
         template = self.get_object()
         if not request.user.is_admin():
-            return Response(
-                {"error": "Only admins can reject templates"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+            return Response({'error': 'Only admins can reject templates'}, status=status.HTTP_403_FORBIDDEN)
+
         template.status = FeedbackTemplate.STATUS_REJECTED
-        template.save()
-        return Response({"message": "Template rejected successfully"})
-    
+        template.save(update_fields=['status', 'updated_at'])
+        return Response({'message': 'Template rejected successfully'})
+
     @action(detail=True, methods=['get'])
     def analytics(self, request, pk=None):
         template = self.get_object()
-        
-        # Check permissions
-        if not (request.user.is_admin() or 
-                (request.user.is_officer() and template.created_by == request.user)):
-            return Response(
-                {"error": "Permission denied"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Get analytics data
+        if not (request.user.is_admin() or (request.user.is_officer() and template.created_by_id == request.user.id)):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
         responses = FeedbackResponse.objects.filter(template=template)
         total_responses = responses.count()
-        
-        # Field analytics
+
         field_analytics = {}
         for field in template.fields.all():
             answers = FeedbackAnswer.objects.filter(field=field)
-            
+
             if field.field_type == TemplateField.FIELD_RATING:
                 avg_rating = answers.aggregate(avg=Avg('rating_value'))['avg']
                 field_analytics[field.label] = {
                     'type': 'rating',
                     'average': round(avg_rating, 2) if avg_rating else 0,
-                    'count': answers.count()
+                    'count': answers.count(),
                 }
             elif field.field_type == TemplateField.FIELD_CHOICE:
                 choices = answers.values('choice_value').annotate(count=Count('choice_value'))
                 field_analytics[field.label] = {
                     'type': 'choice',
-                    'choices': list(choices)
+                    'choices': list(choices),
                 }
             elif field.field_type == TemplateField.FIELD_NUMBER:
                 avg_number = answers.aggregate(avg=Avg('number_value'))['avg']
                 field_analytics[field.label] = {
                     'type': 'number',
                     'average': round(avg_number, 2) if avg_number else 0,
-                    'count': answers.count()
+                    'count': answers.count(),
                 }
             else:
                 field_analytics[field.label] = {
                     'type': field.field_type,
-                    'count': answers.count()
+                    'count': answers.count(),
                 }
-        
-        # Response trend (last 30 days)
+
         thirty_days_ago = timezone.now() - timedelta(days=30)
-        daily_responses = responses.filter(
-            submitted_at__gte=thirty_days_ago
-        ).extra(
-            select={'day': 'date(submitted_at)'}
-        ).values('day').annotate(count=Count('id')).order_by('day')
-        
+        daily_responses = (
+            responses.filter(submitted_at__gte=thirty_days_ago)
+            .extra(select={'day': 'date(submitted_at)'})
+            .values('day')
+            .annotate(count=Count('id'))
+            .order_by('day')
+        )
+
         analytics_data = {
             'total_responses': total_responses,
             'field_analytics': field_analytics,
-            'response_trend': list(daily_responses)
+            'response_trend': list(daily_responses),
         }
-        
+
         serializer = FeedbackAnalyticsSerializer(analytics_data)
         return Response(serializer.data)
 
@@ -186,33 +174,28 @@ class FeedbackResponseViewSet(viewsets.ModelViewSet):
     queryset = FeedbackResponse.objects.all()
     serializer_class = FeedbackResponseSerializer
     permission_classes = [permissions.IsAuthenticated]
-    http_method_names = ['post']  # Only allow creating responses
-    
+    http_method_names = ['post']
+
     def create(self, request, *args, **kwargs):
-        # Check if template is active
         template_id = request.data.get('template')
         try:
             template = FeedbackTemplate.objects.get(id=template_id)
             if template.status != FeedbackTemplate.STATUS_ACTIVE:
                 return Response(
-                    {"error": "This feedback form is not currently active"}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {'error': 'This feedback form is not currently active'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         except FeedbackTemplate.DoesNotExist:
-            return Response(
-                {"error": "Template not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Check for duplicate submission by user (not IP-based to allow multiple users from same IP)
+            return Response({'error': 'Template not found'}, status=status.HTTP_404_NOT_FOUND)
+
         if FeedbackResponse.objects.filter(
-            template=template, 
+            template=template,
             user=request.user,
-            submitted_at__gte=timezone.now() - timedelta(hours=24)
+            submitted_at__gte=timezone.now() - timedelta(hours=24),
         ).exists():
             return Response(
-                {"error": "You have already submitted feedback for this form today"}, 
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'You have already submitted feedback for this form today'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         return super().create(request, *args, **kwargs)

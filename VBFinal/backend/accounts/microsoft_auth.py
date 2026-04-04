@@ -144,8 +144,9 @@ def microsoft_callback(request):
                 username = f"{base_username}{counter}"
                 counter += 1
             
-            user = User.objects.create(
+            user = User.objects.create_user(
                 email=email,
+                password=None,
                 username=username,
                 first_name=first_name,
                 last_name=last_name,

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import apiService from '../../services/api';
 
 const FeedbackList = ({ userRole, onSelectTemplate }) => {
   const [templates, setTemplates] = useState([]);
@@ -9,30 +10,27 @@ const FeedbackList = ({ userRole, onSelectTemplate }) => {
   }, []);
 
   const fetchTemplates = async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/feedback/templates/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      setTemplates(data.results || data);
+      const data = await apiService.getFeedbackTemplates();
+      setTemplates(data.results || data || []);
     } catch (error) {
       console.error('Error fetching templates:', error);
+      setTemplates([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleStatusChange = async (templateId, newStatus) => {
-    const action = newStatus === 'active' ? 'activate' : 'deactivate';
     try {
-      await fetch(`/api/feedback/templates/${templateId}/${action}/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      if (newStatus === 'active') {
+        await apiService.activateFeedbackTemplate(templateId);
+      } else if (newStatus === 'closed') {
+        await apiService.closeFeedbackTemplate(templateId);
+      } else {
+        await apiService.deactivateFeedbackTemplate(templateId);
+      }
       fetchTemplates();
     } catch (error) {
       console.error('Error updating template status:', error);
@@ -41,8 +39,7 @@ const FeedbackList = ({ userRole, onSelectTemplate }) => {
 
   if (loading) return <div className="text-center py-10 text-lg text-gray-600">Loading templates...</div>;
 
-  // Filter templates based on user role - users only see active templates
-  const filteredTemplates = userRole === 'user' 
+  const filteredTemplates = userRole === 'user'
     ? templates.filter(template => template.status === 'active')
     : templates;
 
@@ -51,7 +48,7 @@ const FeedbackList = ({ userRole, onSelectTemplate }) => {
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl font-bold text-gray-800 m-0">Feedback Forms</h2>
         {userRole === 'officer' && (
-          <button 
+          <button
             className="bg-green-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors"
             onClick={() => onSelectTemplate('create')}
           >
@@ -68,54 +65,57 @@ const FeedbackList = ({ userRole, onSelectTemplate }) => {
               <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
                 template.status === 'draft' ? 'bg-gray-100 text-gray-600' :
                 template.status === 'active' ? 'bg-green-100 text-green-800' :
+                template.status === 'closed' ? 'bg-red-100 text-red-800' :
+                template.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
+                template.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                 'bg-red-100 text-red-800'
               }`}>
                 {template.status}
               </span>
             </div>
-            
+
             {template.description && (
               <p className="text-gray-600 mb-4 leading-relaxed">{template.description}</p>
             )}
-            
+
             <div className="flex flex-col gap-1 mb-5 text-sm text-gray-600">
               <span>Office: {template.office}</span>
               <span>Created: {new Date(template.created_at).toLocaleDateString()}</span>
-              {template.created_by_name && (
-                <span>By: {template.created_by_name}</span>
+              {template.created_by && (
+                <span>By: {template.created_by}</span>
               )}
             </div>
 
             <div className="flex gap-2 flex-wrap">
               {userRole === 'user' && template.status === 'active' && (
-                <button 
+                <button
                   className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition-colors"
                   onClick={() => onSelectTemplate(template.id)}
                 >
                   Fill Form
                 </button>
               )}
-              
+
               {userRole === 'officer' && (
                 <>
-                  <button 
+                  <button
                     className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded hover:bg-gray-700 transition-colors"
                     onClick={() => onSelectTemplate(template.id, 'analytics')}
                   >
                     Analytics
                   </button>
-                  
+
                   {template.status === 'draft' && (
-                    <button 
+                    <button
                       className="px-4 py-2 bg-green-500 text-white text-sm font-medium rounded hover:bg-green-600 transition-colors"
                       onClick={() => handleStatusChange(template.id, 'active')}
                     >
                       Activate
                     </button>
                   )}
-                  
+
                   {template.status === 'active' && (
-                    <button 
+                    <button
                       className="px-4 py-2 bg-yellow-500 text-gray-900 text-sm font-medium rounded hover:bg-yellow-600 transition-colors"
                       onClick={() => handleStatusChange(template.id, 'closed')}
                     >
@@ -133,7 +133,7 @@ const FeedbackList = ({ userRole, onSelectTemplate }) => {
         <div className="text-center py-16 text-gray-600">
           <p className="text-lg mb-5">No feedback forms available</p>
           {userRole === 'officer' && (
-            <button 
+            <button
               className="bg-green-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-600 transition-colors"
               onClick={() => onSelectTemplate('create')}
             >

@@ -57,35 +57,13 @@ const AdminComplaints = () => {
     try {
       const [complaintsData, categoriesData, institutionsData, officersData] = await Promise.all([
         apiService.getComplaints(),
-        apiService.getCategories(),
+        apiService.getAllCategories(),
         apiService.getInstitutions(),
         apiService.getAllUsers()
       ]);
 
       setComplaints(complaintsData.results || complaintsData);
-
-      // Handle paginated categories - load all pages
-      let allCategories = [];
-      if (categoriesData.results) {
-        allCategories = categoriesData.results;
-        // If there are more pages, load them
-        let nextUrl = categoriesData.next;
-        while (nextUrl) {
-          const nextPage = await fetch(nextUrl, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          const nextData = await nextPage.json();
-          allCategories = [...allCategories, ...nextData.results];
-          nextUrl = nextData.next;
-        }
-      } else {
-        allCategories = categoriesData;
-      }
-
-      setCategories(allCategories);
+      setCategories(categoriesData.results || categoriesData || []);
       setInstitutions(institutionsData.results || institutionsData);
 
       // Filter officers (users with officer role)

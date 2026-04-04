@@ -48,9 +48,7 @@ const OfficerProfile = ({ user: propUser }) => {
 
       await apiService.updateUser(user.id, updateData);
 
-      // Update local storage user data
       const updatedUser = { ...user, ...updateData };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
       setAuth(updatedUser);
 
       setIsEditing(false);

@@ -15,14 +15,11 @@ const TokenInterceptor = ({ children }) => {
           // Try to refresh token before logging out
           try {
             await refreshToken();
-            console.log('Token refreshed successfully');
           } catch {
-            console.log('Token refresh failed, logging out...');
             logout();
           }
         }
-      } catch (error) {
-        console.error('Token verification failed:', error);
+      } catch {
         // Try refresh as fallback
         try {
           await refreshToken();
