@@ -465,6 +465,12 @@ class ApiService {
   async updateDepartment(id, data) { return this.request(`/departments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }); }
   async deleteDepartment(id) { return this.request(`/departments/${id}/`, { method: 'DELETE' }); }
 
+  // Programs
+  async getPrograms() { return this.request('/programs/'); }
+  async createProgram(data) { return this.request('/programs/', { method: 'POST', body: JSON.stringify(data) }); }
+  async updateProgram(id, data) { return this.request(`/programs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }); }
+  async deleteProgram(id) { return this.request(`/programs/${id}/`, { method: 'DELETE' }); }
+
   // Campuses
   async getCampuses() { return this.request('/campuses/'); }
   async createCampus(data) { return this.request('/campuses/', { method: 'POST', body: JSON.stringify(data) }); }

@@ -6,11 +6,9 @@ import Modal from '../UI/Modal';
 const ResolverLevelManagement = () => {
   const { isDark } = useTheme();
   const [resolverLevels, setResolverLevels] = useState([]);
-  const [institutions, setInstitutions] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingLevel, setEditingLevel] = useState(null);
   const [formData, setFormData] = useState({
-    institution: '',
     name: '',
     level_order: '',
     escalation_time: ''
@@ -22,12 +20,8 @@ const ResolverLevelManagement = () => {
 
   const loadData = async () => {
     try {
-      const [levelsData, institutionsData] = await Promise.all([
-        apiService.getResolverLevels(),
-        apiService.getInstitutions()
-      ]);
+      const levelsData = await apiService.getResolverLevels();
       setResolverLevels(levelsData.results || levelsData || []);
-      setInstitutions(institutionsData.results || institutionsData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -43,7 +37,7 @@ const ResolverLevelManagement = () => {
       }
       setShowModal(false);
       setEditingLevel(null);
-      setFormData({ institution: '', name: '', level_order: '', escalation_time: '' });
+      setFormData({ name: '', level_order: '', escalation_time: '' });
       loadData();
     } catch (error) {
       console.error('Failed to save resolver level:', error);
@@ -53,7 +47,6 @@ const ResolverLevelManagement = () => {
   const handleEdit = (level) => {
     setEditingLevel(level);
     setFormData({
-      institution: level.institution,
       name: level.name,
       level_order: level.level_order,
       escalation_time: level.escalation_time
@@ -88,7 +81,6 @@ const ResolverLevelManagement = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Institution</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Level Order</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Escalation Time</th>
@@ -98,14 +90,13 @@ const ResolverLevelManagement = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {(resolverLevels || []).length === 0 ? (
               <tr>
-                <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan="4" className="px-6 py-4 text-center text-gray-500">
                   No resolver levels found. Click "Add Resolver Level" to create one.
                 </td>
               </tr>
             ) : (
               (resolverLevels || []).map((level) => (
                 <tr key={level.id}>
-                  <td className="px-6 py-4 text-sm text-gray-900">{level.institution_name}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{level.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">Level {level.level_order}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{level.escalation_time}</td>
@@ -135,26 +126,11 @@ const ResolverLevelManagement = () => {
         onClose={() => {
           setShowModal(false);
           setEditingLevel(null);
-          setFormData({ institution: '', name: '', level_order: '', escalation_time: '' });
+          setFormData({ name: '', level_order: '', escalation_time: '' });
         }}
         title={editingLevel ? 'Edit Resolver Level' : 'Add Resolver Level'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Institution *</label>
-            <select
-              value={formData.institution}
-              onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
-              className="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select Institution</option>
-              {(institutions || []).map((inst) => (
-                <option key={inst.id} value={inst.id}>{inst.name}</option>
-              ))}
-            </select>
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700">Name *</label>
             <input

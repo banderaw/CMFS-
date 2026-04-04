@@ -23,33 +23,33 @@ const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, l
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-[760px] w-full divide-y divide-gray-200">
-            <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-              <tr>
-                {columns.map(c => <th key={c.key} className={thCls}>{c.label}</th>)}
-                <th className={thCls}>Actions</th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
-              {items.length === 0 ? (
+              <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                 <tr>
-                  <td colSpan={columns.length + 1} className="px-4 py-6 text-center text-gray-500">
-                    No records found.
-                  </td>
+                  {columns.map(c => <th key={c.key} className={thCls}>{c.label}</th>)}
+                  <th className={thCls}>Actions</th>
                 </tr>
-              ) : items.map(item => (
-                <tr key={item.id} className={isDark ? 'bg-gray-800' : 'hover:bg-gray-50'}>
-                  {columns.map(c => (
-                    <td key={c.key} className={`${tdCls} ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                      {c.render ? c.render(item) : item[c.key] ?? '—'}
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length + 1} className="px-4 py-6 text-center text-gray-500">
+                      No records found.
                     </td>
-                  ))}
-                  <td className={`${tdCls} space-x-3`}>
-                    <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-                    <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+                  </tr>
+                ) : items.map(item => (
+                  <tr key={item.id} className={isDark ? 'bg-gray-800' : 'hover:bg-gray-50'}>
+                    {columns.map(c => (
+                      <td key={c.key} className={`${tdCls} ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                        {c.render ? c.render(item) : item[c.key] ?? '—'}
+                      </td>
+                    ))}
+                    <td className={`${tdCls} space-x-3`}>
+                      <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                      <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         )}
@@ -113,14 +113,7 @@ const FormModal = ({ isDark, isOpen, onClose, title, fields, formData, onChange,
 
 const InstitutionManagement = () => {
   const { isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState('institutions');
-
-  // Institutions (existing /api/institutions/)
-  const [institutions, setInstitutions] = useState([]);
-  const [instLoading, setInstLoading] = useState(false);
-  const [instModal, setInstModal] = useState(false);
-  const [instEditing, setInstEditing] = useState(null);
-  const [instForm, setInstForm] = useState({ name: '', domain: '' });
+  const [activeTab, setActiveTab] = useState('campuses');
 
   // Campuses
   const [campuses, setCampuses] = useState([]);
@@ -143,15 +136,17 @@ const InstitutionManagement = () => {
   const [deptEditing, setDeptEditing] = useState(null);
   const [deptForm, setDeptForm] = useState({ department_name: '', department_college: '' });
 
+  // Programs
+  const [programs, setPrograms] = useState([]);
+  const [progLoading, setProgLoading] = useState(false);
+  const [progModal, setProgModal] = useState(false);
+  const [progEditing, setProgEditing] = useState(null);
+  const [progForm, setProgForm] = useState({ program_name: '', description: '', is_active: true });
+
   const load = async (tab) => {
-    if (tab === 'institutions') {
-      setInstLoading(true);
-      try { const d = await apiService.getInstitutions(); setInstitutions(d.results ?? d); } catch {}
-      finally { setInstLoading(false); }
-    }
     if (tab === 'campuses') {
       setCampLoading(true);
-      try { const d = await apiService.getCampuses(); setCampuses(d.results ?? d); } catch {}
+      try { const d = await apiService.getCampuses(); setCampuses(d.results ?? d); } catch { }
       finally { setCampLoading(false); }
     }
     if (tab === 'colleges') {
@@ -160,7 +155,7 @@ const InstitutionManagement = () => {
         const [c, col] = await Promise.all([apiService.getCampuses(), apiService.getColleges()]);
         setCampuses(c.results ?? c);
         setColleges(col.results ?? col);
-      } catch {}
+      } catch { }
       finally { setCampLoading(false); setColLoading(false); }
     }
     if (tab === 'departments') {
@@ -169,12 +164,20 @@ const InstitutionManagement = () => {
         const [col, dept] = await Promise.all([apiService.getColleges(), apiService.getDepartments()]);
         setColleges(col.results ?? col);
         setDepartments(dept.results ?? dept);
-      } catch {}
+      } catch { }
       finally { setColLoading(false); setDeptLoading(false); }
+    }
+    if (tab === 'programs') {
+      setProgLoading(true);
+      try {
+        const data = await apiService.getPrograms();
+        setPrograms(data.results ?? data);
+      } catch { }
+      finally { setProgLoading(false); }
     }
   };
 
-  useEffect(() => { load('institutions'); }, []);
+  useEffect(() => { load('campuses'); }, []);
   useEffect(() => { load(activeTab); }, [activeTab]);
 
   // Generic submit/delete helpers
@@ -193,10 +196,10 @@ const InstitutionManagement = () => {
   };
 
   const tabs = [
-    { id: 'institutions', label: 'Institutions', icon: '🏛️' },
     { id: 'campuses', label: 'Campuses', icon: '🗺️' },
     { id: 'colleges', label: 'Colleges', icon: '🎓' },
     { id: 'departments', label: 'Departments', icon: '🏢' },
+    { id: 'programs', label: 'Programs', icon: '📚' },
     { id: 'offices', label: 'Office', icon: '📂' },
     { id: 'office-assignments', label: 'Assignment', icon: '👥' },
     { id: 'resolver-levels', label: 'Resolver Levels', icon: '⚡' },
@@ -204,32 +207,6 @@ const InstitutionManagement = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'institutions':
-        return (
-          <>
-            <CrudSection
-              isDark={isDark} title="Institutions" items={institutions} loading={instLoading}
-              columns={[
-                { key: 'name', label: 'Name' },
-                { key: 'domain', label: 'Domain' },
-                { key: 'created_at', label: 'Created', render: i => i.created_at ? new Date(i.created_at).toLocaleDateString() : '—' },
-              ]}
-              onAdd={() => { setInstEditing(null); setInstForm({ name: '', domain: '' }); setInstModal(true); }}
-              onEdit={i => { setInstEditing(i); setInstForm({ name: i.name, domain: i.domain }); setInstModal(true); }}
-              onDelete={id => handleDelete(id, apiService.deleteInstitution.bind(apiService), 'institutions')}
-            />
-            <FormModal isDark={isDark} isOpen={instModal} onClose={() => setInstModal(false)}
-              title="Institution" editing={instEditing} formData={instForm}
-              onChange={(k, v) => setInstForm(p => ({ ...p, [k]: v }))}
-              onSubmit={e => { handleSubmit(e, instEditing, instForm, apiService.createInstitution.bind(apiService), apiService.updateInstitution.bind(apiService), 'institutions'); setInstModal(false); }}
-              fields={[
-                { key: 'name', label: 'Name', required: true, placeholder: 'e.g. Gondar University' },
-                { key: 'domain', label: 'Domain', required: true, placeholder: 'e.g. uog.edu.et' },
-              ]}
-            />
-          </>
-        );
-
       case 'campuses':
         return (
           <>
@@ -323,6 +300,61 @@ const InstitutionManagement = () => {
           </>
         );
 
+      case 'programs':
+        return (
+          <>
+            <CrudSection
+              isDark={isDark} title="Programs" items={programs} loading={progLoading}
+              columns={[
+                { key: 'program_name', label: 'Program Name' },
+                { key: 'description', label: 'Description' },
+                { key: 'is_active', label: 'Active', render: p => p.is_active ? '✅' : '❌' },
+                { key: 'created_at', label: 'Created', render: p => p.created_at ? new Date(p.created_at).toLocaleDateString() : '—' },
+              ]}
+              onAdd={() => {
+                setProgEditing(null);
+                setProgForm({ program_name: '', description: '', is_active: true });
+                setProgModal(true);
+              }}
+              onEdit={(item) => {
+                setProgEditing(item);
+                setProgForm({
+                  program_name: item.program_name || '',
+                  description: item.description || '',
+                  is_active: item.is_active ?? true,
+                });
+                setProgModal(true);
+              }}
+              onDelete={(id) => handleDelete(id, apiService.deleteProgram.bind(apiService), 'programs')}
+            />
+            <FormModal
+              isDark={isDark}
+              isOpen={progModal}
+              onClose={() => setProgModal(false)}
+              title="Program"
+              editing={progEditing}
+              formData={progForm}
+              onChange={(k, v) => setProgForm((prev) => ({ ...prev, [k]: v }))}
+              onSubmit={(e) => {
+                handleSubmit(
+                  e,
+                  progEditing,
+                  progForm,
+                  apiService.createProgram.bind(apiService),
+                  apiService.updateProgram.bind(apiService),
+                  'programs'
+                );
+                setProgModal(false);
+              }}
+              fields={[
+                { key: 'program_name', label: 'Program Name', required: true, placeholder: 'e.g. Software Engineering' },
+                { key: 'description', label: 'Description', placeholder: 'Brief description...' },
+                { key: 'is_active', label: 'Active', type: 'checkbox' },
+              ]}
+            />
+          </>
+        );
+
       case 'resolver-levels':
         return <ResolverLevelManagement />;
 
@@ -346,11 +378,10 @@ const InstitutionManagement = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1.5 transition-colors ${
-                  activeTab === tab.id
+                className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1.5 transition-colors ${activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
                     : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
-                }`}
+                  }`}
               >
                 <span>{tab.icon}</span>
                 <span>{tab.label}</span>

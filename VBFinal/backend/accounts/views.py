@@ -444,7 +444,7 @@ class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'message': 'Logs cleared.'})
 
 
-class ProgramViewSet(AdminOnlyModelViewSet):
+class ProgramViewSet(PublicReadAdminWriteMixin, viewsets.ModelViewSet):
     queryset = Program.objects.order_by('id')
     serializer_class = ProgramSerializer
 
