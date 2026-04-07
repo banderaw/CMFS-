@@ -14,8 +14,13 @@ const AuthSuccess = lazy(() => import('./pages/AuthSuccess'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AdminComplaintDetail = lazy(() => import('./pages/AdminComplaintDetail'));
+const AdminUserDetail = lazy(() => import('./pages/AdminUserDetail'));
+const AdminUserOptions = lazy(() => import('./pages/AdminUserOptions'));
 const OfficerDashboard = lazy(() => import('./pages/OfficerDashboard'));
 const UserDashboard = lazy(() => import('./pages/UserDashboard'));
+const OfficerComplaintDetail = lazy(() => import('./pages/OfficerComplaintDetail'));
+const UserComplaintDetail = lazy(() => import('./pages/UserComplaintDetail'));
 
 // Simple loading fallback
 const RouteLoadingFallback = () => (
@@ -79,6 +84,30 @@ const AppContent = () => {
           }
         />
         <Route
+          path="/admin/complaints/:complaintId"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminComplaintDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/:userId"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminUserDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/:userId/options"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminUserOptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/officer"
           element={
             <ProtectedRoute requiredRole="officer">
@@ -87,10 +116,26 @@ const AppContent = () => {
           }
         />
         <Route
+          path="/officer/complaints/:complaintId"
+          element={
+            <ProtectedRoute requiredRole="officer">
+              <OfficerComplaintDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/user"
           element={
             <ProtectedRoute requiredRole="user">
               <UserDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/user/complaints/:complaintId"
+          element={
+            <ProtectedRoute requiredRole="user">
+              <UserComplaintDetail />
             </ProtectedRoute>
           }
         />
@@ -110,7 +155,7 @@ function App() {
           <AuthProvider>
             <TokenInterceptor>
               <Router future={{ v7_relativeSplatPath: true }}>
-                <div className="App min-h-screen bg-inherit pt-20 pb-56">
+                <div className="App min-h-screen bg-inherit pb-56">
                   <AppContent />
                 </div>
               </Router>

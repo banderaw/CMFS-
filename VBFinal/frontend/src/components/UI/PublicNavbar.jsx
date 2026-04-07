@@ -61,8 +61,8 @@ const PublicNavbar = () => {
                 </svg>
               </div>
               <div>
-                <h1 className={`text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>CMFS</h1>
-                <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Management System</p>
+                <h1 className={`text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>CMFTS</h1>
+                <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}> System</p>
               </div>
             </div>
           </div>
@@ -72,11 +72,10 @@ const PublicNavbar = () => {
         <div className="hidden lg:flex items-center space-x-1">
           {navItems.map((item) => (
             <a key={item.name} href={item.path}
-              className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-                location.pathname === item.path || (item.path.includes('#') && location.pathname === '/landing')
-                  ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
-                  : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}>
+              className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${location.pathname === item.path || (item.path.includes('#') && location.pathname === '/landing')
+                ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
+                : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}>
               {item.name}
             </a>
           ))}
@@ -184,11 +183,10 @@ const PublicNavbar = () => {
           {navItems.map((item) => (
             <a key={item.name} href={item.path}
               onClick={() => setMobileMenuOpen(false)}
-              className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-150 ${
-                location.pathname === item.path
-                  ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
-                  : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}>
+              className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-150 ${location.pathname === item.path
+                ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
+                : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}>
               {item.name}
             </a>
           ))}

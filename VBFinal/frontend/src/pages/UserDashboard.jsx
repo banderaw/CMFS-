@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import DashboardNavbar from '../components/UI/DashboardNavbar';
 import Sidebar from '../components/UI/Sidebar';
@@ -13,12 +13,14 @@ import UserProfile from '../components/User/UserProfile';
 import MaintenanceNotification from '../components/UI/MaintenanceNotification';
 import UserFeedback from '../components/User/UserFeedback';
 import Appointments from '../components/User/Appointments';
+import { getUserNavItems } from '../constants/navigation';
 
 const UserDashboard = () => {
   const { isDark } = useTheme();
   const { t } = useLanguage();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [activeTab, setActiveTab] = useState('submit');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -103,14 +105,15 @@ const UserDashboard = () => {
     }
   };
 
-  const menuItems = [
-    { id: 'submit', icon: '📝', name: t('submit_complaint') },
-    { id: 'my-complaints', icon: '📋', name: t('my_complaints') },
-    { id: 'appointments', icon: '📅', name: t('appointments') },
-    { id: 'notifications', icon: '🔔', name: t('notifications'), badge: unreadCount },
-    { id: 'feedback', icon: '💬', name: t('feedback') },
-    { id: 'profile', icon: '👤', name: t('profile') }
-  ];
+  const menuItems = getUserNavItems(t, unreadCount);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab && menuItems.some((item) => item.id === tab)) {
+      setActiveTab(tab);
+    }
+  }, [location.search, menuItems]);
 
   if (loading) {
     return (

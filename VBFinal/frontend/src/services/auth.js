@@ -1,4 +1,13 @@
-const AUTH_API_URL = `${import.meta.env.VITE_API_URL || "/api"}/accounts`;
+const normalizeApiBase = (rawBase) => {
+  const trimmed = (rawBase || '/api').trim().replace(/\/+$/, '');
+  if (trimmed === '/api' || trimmed.endsWith('/api')) {
+    return trimmed;
+  }
+  return `${trimmed}/api`;
+};
+
+const API_BASE_URL = normalizeApiBase(import.meta.env.VITE_API_URL);
+const AUTH_API_URL = `${API_BASE_URL}/accounts`;
 
 class AuthService {
   setAuthData(data) {

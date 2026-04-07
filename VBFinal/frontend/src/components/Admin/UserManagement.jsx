@@ -1,29 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import apiService from '../../services/api';
 import Modal from '../UI/Modal';
 
 const UserManagement = () => {
   const { isDark } = useTheme();
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    username: '',
-    email: '',
-    gmail_account: '',
-    phone: '',
-    campus_id: '',
-    user_campus: '',
-    college: '',
-    department: '',
-    role: 'user',
-    is_active: true
-  });
   const [filters, setFilters] = useState({
     role: 'all',
     status: 'all',
@@ -36,10 +22,10 @@ const UserManagement = () => {
     totalPages: 0
   });
 
-  const [colleges, setColleges] = useState([]);
-  const [campuses, setCampuses] = useState([]);
-  const [departments, setDepartments] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [campuses, setCampuses] = useState([]);
+  const [colleges, setColleges] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [addForm, setAddForm] = useState({
     first_name: '',
     last_name: '',
@@ -136,82 +122,6 @@ const UserManagement = () => {
     setPagination(prev => ({ ...prev, currentPage: page }));
   };
 
-  const toggleUserStatus = async (userId, currentStatus) => {
-    try {
-      const newStatus = !currentStatus;
-      await apiService.updateUser(userId, { is_active: newStatus });
-      setUsers(prev =>
-        prev.map(user =>
-          user.id === userId ? { ...user, is_active: newStatus } : user
-        )
-      );
-    } catch (error) {
-      console.error('Failed to update user status:', error);
-      alert('Failed to update user status');
-    }
-  };
-
-  const handleDelete = async (userId) => {
-    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      try {
-        await apiService.deleteUser(userId);
-        setUsers(prev => prev.filter(user => user.id !== userId));
-        alert('User deleted successfully');
-      } catch (error) {
-        console.error('Failed to delete user:', error);
-        alert('Failed to delete user');
-      }
-    }
-  };
-
-  const handleEdit = (user) => {
-    setEditingUser(user);
-    setFormData({
-      first_name: user.first_name || '',
-      last_name: user.last_name || '',
-      username: user.username || '',
-      email: user.email || '',
-      gmail_account: user.gmail_account || '',
-      phone: user.phone || '',
-      campus_id: user.campus_id || '',
-      user_campus: user.user_campus || '',
-      college: user.college || '',
-      department: user.department || '',
-      role: user.role || 'user',
-      is_active: user.is_active
-    });
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        ...formData,
-        username: formData.username || null,
-        gmail_account: formData.gmail_account || null,
-        phone: formData.phone || null,
-        campus_id: formData.campus_id || null,
-        user_campus: formData.user_campus || null,
-        college: formData.college || null,
-        department: formData.department || null,
-      };
-
-      await apiService.updateUser(editingUser.id, payload);
-      setUsers(prev =>
-        prev.map(user =>
-          user.id === editingUser.id ? { ...user, ...payload } : user
-        )
-      );
-      setShowEditModal(false);
-      setEditingUser(null);
-      alert('User updated successfully');
-    } catch (error) {
-      console.error('Failed to update user:', error);
-      alert('Failed to update user. Please try again.');
-    }
-  };
-
   const handleAddUser = async (e) => {
     e.preventDefault();
     setAddError('');
@@ -261,22 +171,6 @@ const UserManagement = () => {
   const filteredDepartments = addForm.college
     ? departments.filter((department) => String(department.department_college) === String(addForm.college))
     : departments;
-
-  const editFilteredColleges = formData.user_campus
-    ? colleges.filter((college) => String(college.college_campus) === String(formData.user_campus))
-    : colleges;
-
-  const editFilteredDepartments = formData.college
-    ? departments.filter((department) => String(department.department_college) === String(formData.college))
-    : departments;
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
 
   const availableRoleCodes = React.useMemo(() => {
     return ['user', 'officer', 'admin'];
@@ -422,31 +316,24 @@ const UserManagement = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => toggleUserStatus(user.id, user.is_active)}
+                    <span
                       className={`px-2 py-1 rounded text-xs font-medium ${user.is_active
-                        ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                        : 'bg-red-100 text-red-800 hover:bg-red-200'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
                         }`}
                     >
                       {user.is_active ? 'Active' : 'Inactive'}
-                    </button>
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     {user.date_joined ? new Date(user.date_joined).toLocaleDateString() : 'N/A'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm space-x-3">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <button
-                      onClick={() => handleEdit(user)}
+                      onClick={() => navigate(`/admin/users/${user.id}/options`)}
                       className="text-blue-600 hover:text-blue-900 font-medium"
                     >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id)}
-                      className="text-red-600 hover:text-red-900 font-medium"
-                    >
-                      Delete
+                      Options
                     </button>
                   </td>
                 </tr>
@@ -637,218 +524,6 @@ const UserManagement = () => {
         </form>
       </Modal>
 
-      {/* Edit User Modal */}
-      <Modal
-        isOpen={showEditModal}
-        onClose={() => {
-          setShowEditModal(false);
-          setEditingUser(null);
-        }}
-        title="Edit User"
-      >
-        <form onSubmit={handleSaveEdit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                First Name
-              </label>
-              <input
-                type="text"
-                name="first_name"
-                value={formData.first_name}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                required
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Last Name
-              </label>
-              <input
-                type="text"
-                name="last_name"
-                value={formData.last_name}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Username
-              </label>
-              <input
-                type="text"
-                name="username"
-                value={formData.username}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Gmail Account
-              </label>
-              <input
-                type="email"
-                name="gmail_account"
-                value={formData.gmail_account}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-              Email
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Phone
-              </label>
-              <input
-                type="text"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              />
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Campus ID
-              </label>
-              <input
-                type="text"
-                name="campus_id"
-                value={formData.campus_id}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Campus
-              </label>
-              <select
-                name="user_campus"
-                value={formData.user_campus}
-                onChange={(e) => setFormData(prev => ({ ...prev, user_campus: e.target.value, college: '', department: '' }))}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              >
-                <option value="">Select Campus</option>
-                {campuses.map(campus => (
-                  <option key={campus.id} value={campus.id}>
-                    {campus.campus_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                College
-              </label>
-              <select
-                name="college"
-                value={formData.college}
-                onChange={(e) => setFormData(prev => ({ ...prev, college: e.target.value, department: '' }))}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              >
-                <option value="">Select College</option>
-                {editFilteredColleges.map(college => (
-                  <option key={college.id} value={college.id}>
-                    {college.college_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Department
-              </label>
-              <select
-                name="department"
-                value={formData.department}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-              >
-                <option value="">Select Department</option>
-                {editFilteredDepartments.map(department => (
-                  <option key={department.id} value={department.id}>
-                    {department.department_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-                Role
-              </label>
-              <select
-                name="role"
-                value={formData.role}
-                onChange={handleInputChange}
-                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                required
-              >
-                {availableRoleCodes.map((roleCode) => (
-                  <option key={roleCode} value={roleCode}>{getRoleLabel(roleCode)}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center pt-6">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  checked={formData.is_active}
-                  onChange={handleInputChange}
-                  className="mr-2"
-                />
-                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Active User</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
-            <button
-              type="button"
-              onClick={() => setShowEditModal(false)}
-              className={`px-4 py-2 border rounded-md transition-colors ${isDark ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 };

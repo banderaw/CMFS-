@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FeedbackFormBuilder, FeedbackAnalytics } from '../components/feedback';
 import MaintenanceNotification from '../components/UI/MaintenanceNotification';
 import DashboardNavbar from '../components/UI/DashboardNavbar';
@@ -11,17 +11,22 @@ import OfficerSchedule from '../components/Officer/OfficerSchedule';
 import OfficerProfile from '../components/Officer/OfficerProfile';
 import PublicAnnouncementBoard from '../components/Officer/PublicAnnouncementBoard';
 import Modal from '../components/UI/Modal';
+import ComplaintConversation from '../components/complaints/ComplaintConversation';
+import ComplaintAnalyticsPanel from '../components/analytics/ComplaintAnalyticsPanel';
+import { OFFICER_NAV_ITEMS } from '../constants/navigation';
 
 const OfficerDashboard = () => {
   const { isDark } = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [complaintStatusFilter, setComplaintStatusFilter] = useState('all');
+  const [templateStatusFilter, setTemplateStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [complaints, setComplaints] = useState([]);
   const [ccComplaints, setCcComplaints] = useState([]);
@@ -29,9 +34,13 @@ const OfficerDashboard = () => {
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [newStatus, setNewStatus] = useState('');
-  const [responseText, setResponseText] = useState('');
   const [responses, setResponses] = useState([]);
   const [comments, setComments] = useState([]);
+  const [threadSyncing, setThreadSyncing] = useState(false);
+  const [hasThreadUpdates, setHasThreadUpdates] = useState(false);
+  const threadSnapshotRef = useRef('');
+  const latestResponseRef = useRef(null);
+  const latestCommentRef = useRef(null);
   const [dashboardStats, setDashboardStats] = useState({
     assignedComplaints: 0,
     resolvedComplaints: 0,
@@ -43,30 +52,15 @@ const OfficerDashboard = () => {
   const [reassignReason, setReassignReason] = useState('');
   const [officers, setOfficers] = useState([]);
 
-  const menuItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: '📊' },
-    { id: 'complaints', name: 'Manage Complaints', icon: '📋' },
-    { id: 'announcements', name: 'Public Announcements', icon: '📢' },
-    { id: 'schedule', name: 'Schedule', icon: '📅' },
-    { id: 'create-template', name: 'Create Template', icon: '➕' },
-    { id: 'manage-templates', name: 'Manage Templates', icon: '📝' },
-    { id: 'analytics', name: 'Analytics', icon: '📈' },
-    { id: 'profile', name: 'Profile', icon: '👤' },
-  ];
+  const menuItems = OFFICER_NAV_ITEMS;
 
   useEffect(() => {
-    if (activeTab === 'manage-templates') {
-      fetchTemplates();
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab && menuItems.some((item) => item.id === tab)) {
+      setActiveTab(tab);
     }
-    if (activeTab === 'complaints') {
-      fetchComplaints();
-      fetchCCComplaints();
-    }
-    if (activeTab === 'dashboard') {
-      fetchDashboardStats();
-      fetchTemplates();
-    }
-  }, [activeTab, user?.id, fetchComplaints, fetchDashboardStats]);
+  }, [location.search, menuItems]);
 
   const fetchDashboardStats = useCallback(async () => {
     try {
@@ -81,12 +75,12 @@ const OfficerDashboard = () => {
         assignedComplaints,
         resolvedComplaints,
         pendingComplaints,
-        totalTemplates: Array.isArray(templates) ? templates.length : 0
+        totalTemplates: 0,
       });
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
     }
-  }, [user?.id, templates]);
+  }, [user?.id]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -107,16 +101,15 @@ const OfficerDashboard = () => {
     setComplaintsLoading(true);
     try {
       const data = await apiService.getComplaints();
-      const assignedComplaints = (Array.isArray(data) ? data : data.results || [])
-        .filter(complaint => complaint.assigned_officer?.id === user?.id);
-      setComplaints(assignedComplaints);
+      const availableComplaints = Array.isArray(data) ? data : data.results || [];
+      setComplaints(availableComplaints);
     } catch (error) {
       console.error('Error fetching complaints:', error);
       setComplaints([]);
     } finally {
       setComplaintsLoading(false);
     }
-  }, [user?.id]);
+  }, []);
 
   const fetchCCComplaints = async () => {
     try {
@@ -148,6 +141,27 @@ const OfficerDashboard = () => {
       setOfficers([]);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'manage-templates') {
+      fetchTemplates();
+    }
+    if (activeTab === 'complaints') {
+      fetchComplaints();
+      fetchCCComplaints();
+    }
+    if (activeTab === 'dashboard') {
+      fetchDashboardStats();
+      fetchTemplates();
+    }
+  }, [activeTab, user?.id, fetchComplaints, fetchDashboardStats]);
+
+  useEffect(() => {
+    setDashboardStats((prev) => ({
+      ...prev,
+      totalTemplates: Array.isArray(templates) ? templates.length : 0,
+    }));
+  }, [templates]);
 
   const handleReassign = async () => {
     if (!reassignOfficerId) {
@@ -182,60 +196,100 @@ const OfficerDashboard = () => {
     }
   };
 
-  const handleAddResponse = async () => {
-    if (!responseText.trim()) {
-      alert('Please enter a response message');
-      return;
-    }
-
-    try {
-      await apiService.createResponse({
-        complaint: selectedComplaint.complaint_id,
-        title: 'Officer Response',
-        message: responseText,
-        response_type: 'update'
-      });
-      setResponseText('');
-      fetchResponses();
-      alert('Response added successfully');
-    } catch (error) {
-      console.error('Error adding response:', error);
-      alert('Failed to add response');
-    }
-  };
-
-  const fetchResponses = async (complaintId = null) => {
+  const fetchResponses = useCallback(async (complaintId = null) => {
     const targetComplaintId = complaintId || selectedComplaint?.complaint_id;
-    if (!targetComplaintId) return;
+    if (!targetComplaintId) return [];
     try {
       const data = await apiService.getComplaintResponses(targetComplaintId);
-      setResponses(data.results || data || []);
+      const responseList = data.results || data || [];
+      setResponses(responseList);
+      return responseList;
     } catch (error) {
       console.error('Error fetching responses:', error);
+      setResponses([]);
+      return [];
     }
-  };
+  }, [selectedComplaint?.complaint_id]);
 
-  const fetchComments = async (complaintId = null) => {
+  const fetchComments = useCallback(async (complaintId = null) => {
     const targetComplaintId = complaintId || selectedComplaint?.complaint_id;
-    if (!targetComplaintId) return;
+    if (!targetComplaintId) return [];
     try {
       const data = await apiService.getComplaintComments(targetComplaintId);
-      setComments(data.results || data || []);
+      const commentList = data.results || data || [];
+      setComments(commentList);
+      return commentList;
     } catch (error) {
       console.error('Error fetching comments:', error);
+      setComments([]);
+      return [];
     }
-  };
+  }, [selectedComplaint?.complaint_id]);
 
-  const handleDeleteResponse = async (responseId) => {
-    if (!confirm('Are you sure you want to delete this response?')) return;
+  const syncSelectedComplaintThread = useCallback(async (silent = false, complaintIdOverride = null) => {
+    const complaintId = complaintIdOverride || selectedComplaint?.complaint_id;
+    if (!complaintId) return;
+
+    if (!silent) setThreadSyncing(true);
     try {
-      await apiService.deleteResponse(responseId);
-      fetchResponses();
-      alert('Response deleted successfully');
+      const latestComplaint = await apiService.getComplaint(complaintId);
+      if (latestComplaint?.complaint_id) {
+        setSelectedComplaint(latestComplaint);
+      }
+
+      const [nextResponses, nextComments] = await Promise.all([
+        fetchResponses(complaintId),
+        fetchComments(complaintId),
+      ]);
+
+      const nextSignature = [
+        nextResponses.length,
+        nextResponses[0]?.id || '',
+        nextResponses[0]?.updated_at || nextResponses[0]?.created_at || '',
+        nextComments.length,
+        nextComments[0]?.id || '',
+        nextComments[0]?.updated_at || nextComments[0]?.created_at || '',
+      ].join('|');
+
+      if (silent && threadSnapshotRef.current && threadSnapshotRef.current !== nextSignature) {
+        setHasThreadUpdates(true);
+      }
+
+      threadSnapshotRef.current = nextSignature;
+
+      if (!silent) {
+        setHasThreadUpdates(false);
+      }
     } catch (error) {
-      console.error('Error deleting response:', error);
+      console.error('Error syncing complaint thread:', error);
+    } finally {
+      if (!silent) setThreadSyncing(false);
     }
-  };
+  }, [selectedComplaint?.complaint_id, fetchResponses, fetchComments]);
+
+  useEffect(() => {
+    if (!showComplaintModal || !selectedComplaint?.complaint_id) return;
+
+    const interval = setInterval(() => {
+      syncSelectedComplaintThread(true);
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [showComplaintModal, selectedComplaint?.complaint_id, syncSelectedComplaintThread]);
+
+  const scrollToNewestThreadItem = useCallback(() => {
+    const newestResponseTime = responses[0]?.updated_at || responses[0]?.created_at || null;
+    const newestCommentTime = comments[0]?.updated_at || comments[0]?.created_at || null;
+
+    const responseTs = newestResponseTime ? Date.parse(newestResponseTime) : 0;
+    const commentTs = newestCommentTime ? Date.parse(newestCommentTime) : 0;
+
+    const targetRef = commentTs > responseTs ? latestCommentRef : latestResponseRef;
+    if (targetRef.current && typeof targetRef.current.scrollIntoView === 'function') {
+      targetRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHasThreadUpdates(false);
+    }
+  }, [responses, comments]);
 
   const handleStatusChange = async (templateId, newStatus) => {
     try {
@@ -304,7 +358,7 @@ const OfficerDashboard = () => {
   };
 
   const filteredTemplates = Array.isArray(templates) ? templates.filter(template =>
-    statusFilter === 'all' || template.status === statusFilter
+    templateStatusFilter === 'all' || template.status === templateStatusFilter
   ).reverse() : [];
 
   const getComplaintFiles = (complaint) => {
@@ -488,8 +542,8 @@ const OfficerDashboard = () => {
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Assigned Complaints ({complaints.length})</h3>
                     <select
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
+                      value={complaintStatusFilter}
+                      onChange={(e) => setComplaintStatusFilter(e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-md"
                     >
                       <option value="all">All Status</option>
@@ -502,7 +556,7 @@ const OfficerDashboard = () => {
 
                   <div className="space-y-3">
                     {complaints
-                      .filter(complaint => statusFilter === 'all' || complaint.status === statusFilter)
+                      .filter(complaint => complaintStatusFilter === 'all' || complaint.status === complaintStatusFilter)
                       .map(complaint => (
                         <div key={complaint.complaint_id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
                           <div className="flex justify-between items-start mb-2">
@@ -535,11 +589,7 @@ const OfficerDashboard = () => {
                             )}
                             <button
                               onClick={() => {
-                                setSelectedComplaint(complaint);
-                                setNewStatus(complaint.status);
-                                setShowComplaintModal(true);
-                                fetchResponses(complaint.complaint_id);
-                                fetchComments(complaint.complaint_id);
+                                navigate(`/officer/complaints/${complaint.complaint_id}`);
                               }}
                               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                             >
@@ -563,7 +613,7 @@ const OfficerDashboard = () => {
 
                   <div className="space-y-3">
                     {ccComplaints
-                      .filter(complaint => statusFilter === 'all' || complaint.status === statusFilter)
+                      .filter(complaint => complaintStatusFilter === 'all' || complaint.status === complaintStatusFilter)
                       .map(complaint => (
                         <div
                           key={complaint.complaint_id}
@@ -606,11 +656,7 @@ const OfficerDashboard = () => {
                             )}
                             <button
                               onClick={() => {
-                                setSelectedComplaint(complaint);
-                                setNewStatus(complaint.status);
-                                setShowComplaintModal(true);
-                                fetchResponses(complaint.complaint_id);
-                                fetchComments(complaint.complaint_id);
+                                navigate(`/officer/complaints/${complaint.complaint_id}`);
                               }}
                               className={`px-4 py-2 rounded text-white font-medium ${isDark ? 'bg-purple-600 hover:bg-purple-700' : 'bg-purple-500 hover:bg-purple-600'} transition-colors`}
                             >
@@ -644,19 +690,26 @@ const OfficerDashboard = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Manage Templates</h2>
               <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                value={templateStatusFilter}
+                onChange={(e) => setTemplateStatusFilter(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="all">All Templates</option>
                 <option value="draft">Draft</option>
+                <option value="pending">Pending</option>
                 <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
                 <option value="closed">Closed</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
 
             {loading ? (
               <div className="text-center py-10 text-gray-600">Loading templates...</div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="text-center py-10 text-gray-600">
+                No templates found for the selected status.
+              </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {filteredTemplates.map(template => (
@@ -664,8 +717,11 @@ const OfficerDashboard = () => {
                     <div className="flex justify-between items-start mb-4">
                       <h3 className="text-xl font-semibold text-gray-800">{template.title}</h3>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${template.status === 'draft' ? 'bg-gray-100 text-gray-600' :
-                        template.status === 'active' ? 'bg-green-100 text-green-800' :
-                          'bg-red-100 text-red-800'
+                        template.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          template.status === 'active' ? 'bg-green-100 text-green-800' :
+                            template.status === 'inactive' ? 'bg-slate-100 text-slate-700' :
+                              template.status === 'closed' ? 'bg-red-100 text-red-800' :
+                                'bg-rose-100 text-rose-800'
                         }`}>
                         {template.status}
                       </span>
@@ -691,7 +747,7 @@ const OfficerDashboard = () => {
                         View Analytics
                       </button>
 
-                      {template.status === 'draft' && (
+                      {(template.status === 'draft' || template.status === 'pending' || template.status === 'inactive') && (
                         <button
                           onClick={() => handleStatusChange(template.id, 'active')}
                           className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
@@ -733,6 +789,14 @@ const OfficerDashboard = () => {
       case 'analytics':
         return (
           <div>
+            <div className="mb-6">
+              <ComplaintAnalyticsPanel
+                title="Assigned Complaint Analytics"
+                subtitle="Live updates for the complaints currently assigned to you."
+                accent="emerald"
+              />
+            </div>
+
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-800">Analytics</h2>
               {selectedTemplate && (
@@ -845,6 +909,25 @@ const OfficerDashboard = () => {
             >
               {selectedComplaint && (
                 <div className="space-y-5">
+                  <div className="flex justify-end">
+                    {hasThreadUpdates && (
+                      <button
+                        type="button"
+                        onClick={scrollToNewestThreadItem}
+                        className="mr-2 px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors"
+                      >
+                        New updates
+                      </button>
+                    )}
+                    <button
+                      onClick={() => syncSelectedComplaintThread(false)}
+                      disabled={threadSyncing}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-60 disabled:cursor-not-allowed`}
+                    >
+                      {threadSyncing ? 'Syncing...' : 'Sync'}
+                    </button>
+                  </div>
+
                   <div className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{selectedComplaint.description}</p>
                   </div>
@@ -987,66 +1070,7 @@ const OfficerDashboard = () => {
                     </div>
                   )}
 
-                  <div>
-                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Add Response</label>
-                    <div className="flex gap-2">
-                      <textarea
-                        value={responseText}
-                        onChange={(e) => setResponseText(e.target.value)}
-                        rows={3}
-                        className={`flex-1 px-3 py-2 border rounded-md ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                        placeholder="Write response to complainant..."
-                      />
-                      <button
-                        onClick={handleAddResponse}
-                        className="h-fit px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className={`font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Responses</h4>
-                      <div className={`max-h-56 overflow-y-auto border rounded-lg p-3 space-y-2 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                        {responses.length === 0 ? (
-                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No responses yet.</p>
-                        ) : responses.map((response) => (
-                          <div key={response.id} className={`p-2 rounded border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                            <p className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{response.message}</p>
-                            <div className="mt-2 flex justify-between items-center">
-                              <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                {new Date(response.created_at).toLocaleString()}
-                              </span>
-                              <button
-                                onClick={() => handleDeleteResponse(response.id)}
-                                className="text-xs text-red-600 hover:text-red-800"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className={`font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Comments</h4>
-                      <div className={`max-h-56 overflow-y-auto border rounded-lg p-3 space-y-2 ${isDark ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
-                        {comments.length === 0 ? (
-                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No comments yet.</p>
-                        ) : comments.map((comment) => (
-                          <div key={comment.id} className={`p-2 rounded border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                            <p className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{comment.message}</p>
-                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {new Date(comment.created_at).toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  <ComplaintConversation complaint={selectedComplaint} role={user?.role} />
                 </div>
               )}
             </Modal>

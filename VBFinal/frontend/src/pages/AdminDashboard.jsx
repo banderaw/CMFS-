@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import apiService from '../services/api';
 import DashboardNavbar from '../components/UI/DashboardNavbar';
 import Sidebar from '../components/UI/Sidebar';
@@ -12,11 +12,13 @@ import FeedbackTemplateManagement from '../components/Admin/FeedbackTemplateMana
 import AdminComplaints from '../components/Admin/AdminComplaints';
 import ContactManagement from '../components/Admin/ContactManagement';
 import AdminProfile from '../components/Admin/AdminProfile';
+import ComplaintAnalyticsPanel from '../components/analytics/ComplaintAnalyticsPanel';
 
 const AdminDashboard = ({ initialTab = 'overview' }) => {
   const { isDark } = useTheme();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState(initialTab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
@@ -29,6 +31,26 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    const tabFromQuery = new URLSearchParams(location.search).get('tab');
+    if (!tabFromQuery) return;
+
+    const validTabs = [
+      'overview',
+      'complaints',
+      'institutions',
+      'users',
+      'feedback-templates',
+      'contact',
+      'system',
+      'profile',
+    ];
+
+    if (validTabs.includes(tabFromQuery)) {
+      setActiveTab(tabFromQuery);
+    }
+  }, [location.search]);
 
   const loadSystemStats = async () => {
     try {
@@ -59,7 +81,6 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
         totalComplaints: complaints.length,
         pendingComplaints: complaints.filter(c => c.status === 'pending').length,
         resolvedComplaints: complaints.filter(c => c.status === 'resolved').length,
-        urgentComplaints: complaints.filter(c => c.priority === 'urgent').length,
         totalUsers: users.length,
         totalInstitutions: institutions.length,
         avgResolutionTime: `${avgResolutionDays} days`
@@ -86,7 +107,6 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
     totalComplaints: 0,
     pendingComplaints: 0,
     resolvedComplaints: 0,
-    urgentComplaints: 0,
     totalUsers: 0,
     totalInstitutions: 0,
     avgResolutionTime: '0 days'
@@ -95,6 +115,12 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
   const renderOverview = () => {
     return (
       <div className="space-y-6">
+        <ComplaintAnalyticsPanel
+          title="University of Gondar Complaint Overview"
+          subtitle="Live complaint counts, daily volume, and category mix."
+          accent="blue"
+        />
+
         {/* System Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
@@ -135,20 +161,6 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
               <div className="ml-4">
                 <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Resolved</p>
                 <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.resolvedComplaints}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-lg">🚨</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Urgent</p>
-                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.urgentComplaints}</p>
               </div>
             </div>
           </div>
@@ -210,12 +222,6 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
                   {systemStats.pendingComplaints} complaints awaiting review
                 </span>
               </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                  {systemStats.urgentComplaints} urgent complaints require attention
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -272,6 +278,7 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
           activeItem={activeTab}
           onItemClick={(id) => {
             setActiveTab(id);
+            navigate(`/admin?tab=${id}`, { replace: true });
             setSidebarOpen(false);
           }}
           onLogout={() => {
@@ -280,6 +287,7 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
           }}
           onProfileClick={() => {
             setActiveTab('profile');
+            navigate('/admin?tab=profile', { replace: true });
             setSidebarOpen(false);
           }}
           onHideSidebar={() => setIsDesktopSidebarCollapsed((prev) => !prev)}

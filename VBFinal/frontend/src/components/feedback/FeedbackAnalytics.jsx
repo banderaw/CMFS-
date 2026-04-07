@@ -4,11 +4,30 @@ import apiService from '../../services/api';
 const FeedbackAnalytics = ({ templateId }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [campuses, setCampuses] = useState([]);
+  const [colleges, setColleges] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [filters, setFilters] = useState({
+    campus: '',
+    college: '',
+    department: '',
+    role: '',
+  });
+  const [appliedFilters, setAppliedFilters] = useState({});
+
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const canUseAnalyticsFilters = currentUser?.role === 'admin' || currentUser?.role === 'officer';
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiService.getFeedbackTemplateAnalytics(templateId);
+      const data = await apiService.getFeedbackTemplateAnalytics(templateId, appliedFilters);
       setAnalytics(data);
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -16,7 +35,83 @@ const FeedbackAnalytics = ({ templateId }) => {
     } finally {
       setLoading(false);
     }
-  }, [templateId]);
+  }, [templateId, appliedFilters]);
+
+  useEffect(() => {
+    const loadCampuses = async () => {
+      if (!canUseAnalyticsFilters) return;
+      try {
+        const data = await apiService.getCampuses();
+        setCampuses(data?.results || data || []);
+      } catch (error) {
+        console.error('Error loading campuses:', error);
+        setCampuses([]);
+      }
+    };
+
+    loadCampuses();
+  }, [canUseAnalyticsFilters]);
+
+  useEffect(() => {
+    const loadColleges = async () => {
+      if (!canUseAnalyticsFilters) return;
+      try {
+        const data = await apiService.getColleges(filters.campus || null);
+        setColleges(data?.results || data || []);
+      } catch (error) {
+        console.error('Error loading colleges:', error);
+        setColleges([]);
+      }
+    };
+
+    loadColleges();
+  }, [filters.campus, canUseAnalyticsFilters]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      if (!canUseAnalyticsFilters) return;
+      try {
+        const data = await apiService.getDepartments(filters.college || null);
+        setDepartments(data?.results || data || []);
+      } catch (error) {
+        console.error('Error loading departments:', error);
+        setDepartments([]);
+      }
+    };
+
+    loadDepartments();
+  }, [filters.college, canUseAnalyticsFilters]);
+
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
+
+    if (name === 'campus') {
+      setFilters((prev) => ({ ...prev, campus: value, college: '', department: '' }));
+      return;
+    }
+
+    if (name === 'college') {
+      setFilters((prev) => ({ ...prev, college: value, department: '' }));
+      return;
+    }
+
+    setFilters((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const applyFilters = () => {
+    const nextFilters = {};
+    if (filters.campus) nextFilters.campus = filters.campus;
+    if (filters.college) nextFilters.college = filters.college;
+    if (filters.department) nextFilters.department = filters.department;
+    if (filters.role) nextFilters.role = filters.role;
+    setAppliedFilters(nextFilters);
+  };
+
+  const clearFilters = () => {
+    const cleared = { campus: '', college: '', department: '', role: '' };
+    setFilters(cleared);
+    setAppliedFilters({});
+  };
 
   useEffect(() => {
     fetchAnalytics();
@@ -27,6 +122,78 @@ const FeedbackAnalytics = ({ templateId }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-5">
+      {canUseAnalyticsFilters && (
+        <div className="mb-6 p-4 bg-white rounded-lg shadow-sm">
+          <h3 className="text-base font-semibold text-gray-800 mb-3">Analytics Filters</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <select
+              name="campus"
+              value={filters.campus}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">All Campuses</option>
+              {campuses.map((campus) => (
+                <option key={campus.id} value={campus.id}>{campus.campus_name}</option>
+              ))}
+            </select>
+
+            <select
+              name="college"
+              value={filters.college}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">All Colleges</option>
+              {colleges.map((college) => (
+                <option key={college.id} value={college.id}>{college.college_name}</option>
+              ))}
+            </select>
+
+            <select
+              name="department"
+              value={filters.department}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">All Departments</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>{department.department_name}</option>
+              ))}
+            </select>
+
+            <select
+              name="role"
+              value={filters.role}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            >
+              <option value="">All Roles</option>
+              <option value="user">User</option>
+              <option value="officer">Officer</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={applyFilters}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+            >
+              Apply Filters
+            </button>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-8 p-5 bg-white rounded-lg shadow-sm">
         <h2 className="text-2xl font-bold text-gray-800 m-0">Feedback Analytics</h2>
         <div className="text-center">
@@ -80,7 +247,7 @@ const FieldAnalytics = ({ data }) => {
                   key={star}
                   className={star <= Math.round(data.average) ? 'opacity-100' : 'opacity-30'}
                 >
-                  â­
+                  ★
                 </span>
               ))}
             </div>

@@ -52,7 +52,6 @@ const Appointments = () => {
 
       {appointments.length === 0 ? (
         <div className={`${cardCls} text-center py-12`}>
-          <div className="text-4xl mb-3">ðŸ“…</div>
           <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t('no_appointments_yet')}</p>
           <p className={`text-sm mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
             {t('appointments_will_appear')}
@@ -66,9 +65,9 @@ const Appointments = () => {
                 <div className="flex-1 min-w-0">
                   <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{appointment.complaint_title}</p>
                   <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    <span>ðŸ“… {new Date(appointment.scheduled_at).toLocaleString()}</span>
-                    {appointment.location && <span>ðŸ“ {appointment.location}</span>}
-                    {appointment.officer && <span>ðŸ‘¤ {appointment.officer.first_name} {appointment.officer.last_name}</span>}
+                    <span>{new Date(appointment.scheduled_at).toLocaleString()}</span>
+                    {appointment.location && <span> {appointment.location}</span>}
+                    {appointment.officer && <span>{appointment.officer.first_name} {appointment.officer.last_name}</span>}
                   </div>
                   {appointment.note && <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{appointment.note}</p>}
                 </div>

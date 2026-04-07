@@ -221,6 +221,7 @@ class Complaint(models.Model):
         null=True,
         blank=True
     )
+    is_anonymous = models.BooleanField(default=False)
 
     status = models.CharField(
         max_length=20,
@@ -604,6 +605,43 @@ class PublicAnnouncement(models.Model):
 
     def __str__(self):
         return f"{self.title} ({'active' if self.is_active else 'inactive'})"
+
+
+class AnnouncementLike(models.Model):
+    announcement = models.ForeignKey(
+        PublicAnnouncement,
+        on_delete=models.CASCADE,
+        related_name='likes'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='announcement_likes'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('announcement', 'user')
+        ordering = ['-created_at']
+
+
+class AnnouncementComment(models.Model):
+    announcement = models.ForeignKey(
+        PublicAnnouncement,
+        on_delete=models.CASCADE,
+        related_name='comments'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='announcement_comments'
+    )
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
 
 

@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from django.urls import reverse
 from rest_framework.test import APITestCase
@@ -139,3 +140,72 @@ class AccountSecurityAPITests(APITestCase):
         config = MaintenanceConfiguration.get_solo()
         self.assertTrue(config.is_enabled)
         self.assertEqual(config.message, 'Maintenance in progress')
+
+
+class MicrosoftAuthCallbackTests(APITestCase):
+    def _mock_token_response(self):
+        class MockResponse:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {'access_token': 'graph-token'}
+
+        return MockResponse()
+
+    def _mock_user_response(self, email='Existing.User@Example.com', microsoft_id='ms-uid-1'):
+        class MockResponse:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {
+                    'mail': email,
+                    'userPrincipalName': email,
+                    'id': microsoft_id,
+                    'givenName': 'Existing',
+                    'surname': 'User',
+                }
+
+        return MockResponse()
+
+    @patch('accounts.microsoft_auth.requests.get')
+    @patch('accounts.microsoft_auth.requests.post')
+    def test_existing_email_logs_in_instead_of_duplicate_create(self, mock_post, mock_get):
+        existing_user = User.objects.create_user(
+            email='existing.user@example.com',
+            password='Password123!',
+            first_name='Local',
+            last_name='Account',
+            role=User.ROLE_USER,
+        )
+
+        mock_post.return_value = self._mock_token_response()
+        mock_get.return_value = self._mock_user_response()
+
+        response = self.client.get(reverse('microsoft-callback'), {'code': 'oauth-code'})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/success?', response.url)
+
+        existing_user.refresh_from_db()
+        self.assertEqual(existing_user.microsoft_id, 'ms-uid-1')
+        self.assertEqual(existing_user.auth_provider, User.AUTH_MICROSOFT)
+        self.assertTrue(existing_user.is_email_verified)
+
+    @patch('accounts.microsoft_auth.requests.get')
+    @patch('accounts.microsoft_auth.requests.post')
+    def test_new_microsoft_user_redirects_to_register_complete(self, mock_post, mock_get):
+        mock_post.return_value = self._mock_token_response()
+        mock_get.return_value = self._mock_user_response(email='new.user@example.com', microsoft_id='ms-uid-2')
+
+        response = self.client.get(reverse('microsoft-callback'), {'code': 'oauth-code'})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/register/complete?', response.url)
+
+        parsed = urlparse(response.url)
+        query = parse_qs(parsed.query)
+        self.assertEqual(query.get('is_new'), ['true'])
+        self.assertEqual(query.get('email'), ['new.user@example.com'])
+        self.assertTrue(User.objects.filter(email='new.user@example.com').exists())

@@ -148,7 +148,7 @@ const FieldInput = ({ field, value, onChange }) => {
               className={`text-2xl transition-opacity ${value >= star ? 'opacity-100' : 'opacity-30'} hover:opacity-70`}
               onClick={() => onChange(star)}
             >
-              â­
+              RATE
             </button>
           ))}
         </div>

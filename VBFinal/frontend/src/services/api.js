@@ -1,4 +1,12 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+const normalizeApiBase = (rawBase) => {
+  const trimmed = (rawBase || '/api').trim().replace(/\/+$/, '');
+  if (trimmed === '/api' || trimmed.endsWith('/api')) {
+    return trimmed;
+  }
+  return `${trimmed}/api`;
+};
+
+const API_BASE_URL = normalizeApiBase(import.meta.env.VITE_API_URL);
 
 class ApiService {
   constructor() {
@@ -143,8 +151,20 @@ class ApiService {
     });
   }
 
-  async getFeedbackTemplateAnalytics(templateId) {
-    return this.request(`/feedback/templates/${templateId}/analytics/`);
+  async getFeedbackTemplateAnalytics(templateId, filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        params.append(key, value);
+      }
+    });
+
+    const query = params.toString();
+    const endpoint = query
+      ? `/feedback/templates/${templateId}/analytics/?${query}`
+      : `/feedback/templates/${templateId}/analytics/`;
+
+    return this.request(endpoint);
   }
 
   async submitFeedbackResponse(data) {
@@ -274,6 +294,10 @@ class ApiService {
     });
   }
 
+  async getComplaintEligibleOfficers(id) {
+    return this.request(`/complaints/${id}/eligible-officers/`);
+  }
+
   async changeComplaintStatus(id, statusValue) {
     return this.request(`/complaints/${id}/change-status/`, {
       method: 'POST',
@@ -291,6 +315,10 @@ class ApiService {
 
   async getComplaintComments(complaintId) {
     return this.request(`/complaints/${complaintId}/comments/`);
+  }
+
+  async getComplaintAnalytics() {
+    return this.request('/complaints/analytics/');
   }
 
   // Responses
@@ -415,8 +443,7 @@ class ApiService {
     return this.request('/contact/', { method: 'POST', body: JSON.stringify(data) });
   }
 
-  // Backward-compatible shim for removed institution endpoints.
-  // The backend no longer exposes /institutions/, so aggregate office units.
+
   async getInstitutions() {
     const [campusesRes, collegesRes, departmentsRes] = await Promise.all([
       this.getCampuses(),
@@ -490,15 +517,19 @@ class ApiService {
 
     while (hasMore) {
       const response = await this.getCategories(page);
-      const categories = response.results || response;
+      const categories = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.results)
+          ? response.results
+          : [];
 
       if (Array.isArray(categories)) {
         allCategories = allCategories.concat(categories);
       } else {
-        return response;
+        return { results: [], count: 0 };
       }
 
-      hasMore = response.next !== null;
+      hasMore = Boolean(response && !Array.isArray(response) && response.next);
       page += 1;
     }
 
@@ -576,15 +607,19 @@ class ApiService {
 
     while (hasMore) {
       const response = await this.getCategoryResolvers(page, 50);
-      const resolvers = response.results || response;
+      const resolvers = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.results)
+          ? response.results
+          : [];
 
       if (Array.isArray(resolvers)) {
         allResolvers = allResolvers.concat(resolvers);
       } else {
-        return response;
+        return { results: [], count: 0 };
       }
 
-      hasMore = response.next !== null;
+      hasMore = Boolean(response && !Array.isArray(response) && response.next);
       page++;
     }
 
@@ -728,6 +763,23 @@ class ApiService {
   async showPublicAnnouncement(id) {
     return this.request(`/announcements/${id}/show/`, {
       method: 'POST',
+    });
+  }
+
+  async toggleAnnouncementLike(id) {
+    return this.request(`/announcements/${id}/toggle-like/`, {
+      method: 'POST',
+    });
+  }
+
+  async getAnnouncementComments(id) {
+    return this.request(`/announcements/${id}/comments/`);
+  }
+
+  async addAnnouncementComment(id, message) {
+    return this.request(`/announcements/${id}/comments/`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
     });
   }
 

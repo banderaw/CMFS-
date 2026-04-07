@@ -29,6 +29,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-me' if DEBUG else No
 if not SECRET_KEY:
     raise ValueError('SECRET_KEY environment variable is required when DEBUG is false.')
 
+try:
+    import channels  # noqa: F401
+    CHANNELS_AVAILABLE = True
+except ImportError:
+    CHANNELS_AVAILABLE = False
+
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 BACKEND_URL = os.getenv('BACKEND_URL', 'http://127.0.0.1:8000')
 
@@ -67,6 +73,9 @@ INSTALLED_APPS = [
     'corsheaders',
     'social_django',
 ]
+
+if CHANNELS_AVAILABLE:
+    INSTALLED_APPS.append('channels')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -119,6 +128,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'conf.wsgi.application'
+ASGI_APPLICATION = 'conf.asgi.application'
 
 # DATABASE_URL = os.getenv('DATABASE_URL')
 # if DATABASE_URL:
@@ -159,6 +169,13 @@ CACHES = {
         'LOCATION': 'cmfs-cache',
     }
 }
+
+if CHANNELS_AVAILABLE:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -231,6 +248,7 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.social_uid',
     'social_core.pipeline.social_auth.auth_allowed',
     'social_core.pipeline.social_auth.social_user',
+    'accounts.pipeline.associate_existing_user_by_email',
     'social_core.pipeline.user.get_username',
     'social_core.pipeline.user.create_user',
     'social_core.pipeline.social_auth.associate_user',

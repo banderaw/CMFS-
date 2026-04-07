@@ -28,7 +28,6 @@ export const CategoryManagement = () => {
   const [formData, setFormData] = useState({
     office_name: '',
     office_description: '',
-    institution: '',
     campus: '',
     college: '',
     department: '',
@@ -121,7 +120,6 @@ export const CategoryManagement = () => {
         campus: formData.campus || null,
         college: formData.college || null,
         department: formData.department || null,
-        institution: formData.institution || null,
         parent: formData.parent || null,
       };
 
@@ -134,7 +132,7 @@ export const CategoryManagement = () => {
       await fetchData();
       setShowModal(false);
       setEditingCategory(null);
-      setFormData({ office_name: '', office_description: '', institution: '', campus: '', college: '', department: '', parent: '', is_active: true });
+      setFormData({ office_name: '', office_description: '', campus: '', college: '', department: '', parent: '', is_active: true });
     } catch (error) {
       console.error('Error saving category:', error);
     }
@@ -145,7 +143,6 @@ export const CategoryManagement = () => {
     setFormData({
       office_name: category.office_name || category.name || '',
       office_description: category.office_description || category.description || '',
-      institution: category.institution || '',
       campus: category.campus || '',
       college: category.college || '',
       department: category.department || '',
@@ -168,7 +165,7 @@ export const CategoryManagement = () => {
 
   const openCreateModal = () => {
     setEditingCategory(null);
-    setFormData({ office_name: '', office_description: '', institution: '', campus: '', college: '', department: '', parent: '', is_active: true });
+    setFormData({ office_name: '', office_description: '', campus: '', college: '', department: '', parent: '', is_active: true });
     setShowModal(true);
   };
 
@@ -486,21 +483,6 @@ export const CategoryManagement = () => {
                     {category.office_name || category.name}
                   </option>
                 ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Institution</label>
-            <select
-              value={formData.institution}
-              onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
-              className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-            >
-              <option value="">Select Institution (Optional)</option>
-              {institutions.map((institution) => (
-                <option key={institution.id} value={institution.id}>
-                  {institution.name}
-                </option>
-              ))}
             </select>
           </div>
           <div className="flex items-center">

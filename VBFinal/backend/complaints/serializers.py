@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.core.exceptions import ValidationError as DjangoValidationError
 from pathlib import Path
 from .models import Category, ResolverLevel, CategoryResolver, Complaint, ComplaintAttachment, ComplaintCC, Comment, Assignment, Response, Notification, Appointment
-from .models import PublicAnnouncement
+from .models import PublicAnnouncement, AnnouncementLike, AnnouncementComment
 
 from django.contrib.auth import get_user_model
 
@@ -155,13 +155,25 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
     cc_emails = serializers.ListField(
         child=serializers.EmailField(), required=False, write_only=True, default=list
     )
+    cc_office_ids = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True, default=list
+    )
     cc_officer_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1), required=False, write_only=True, default=list
     )
 
     class Meta:
         model = Complaint
-        fields = ["title", "description", "category", "attachment", "cc_emails", "cc_officer_ids"]
+        fields = [
+            "title",
+            "description",
+            "category",
+            "attachment",
+            "is_anonymous",
+            "cc_emails",
+            "cc_office_ids",
+            "cc_officer_ids",
+        ]
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -196,6 +208,7 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
                 title=attrs.get('title', ''),
                 description=attrs.get('description', ''),
                 attachment=attrs.get('attachment'),
+                is_anonymous=attrs.get('is_anonymous', False),
             )
             try:
                 draft.full_clean(exclude=['complaint_id', 'created_at', 'updated_at', 'status'])
@@ -210,8 +223,17 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
         from accounts.email_service import EmailService
         
         cc_emails = validated_data.pop('cc_emails', [])
+        cc_office_ids = validated_data.pop('cc_office_ids', [])
         cc_officer_ids = validated_data.pop('cc_officer_ids', [])
         request = self.context.get('request')
+
+        office_category_ids = [str(category_id) for category_id in cc_office_ids if str(category_id).strip()]
+        office_categories = Category.objects.filter(category_id__in=office_category_ids, is_active=True)
+        found_office_ids = {str(category.category_id) for category in office_categories}
+        missing_office_ids = [category_id for category_id in office_category_ids if category_id not in found_office_ids]
+        if missing_office_ids:
+            raise serializers.ValidationError({'cc_office_ids': [f"Invalid office selection: {', '.join(sorted(set(missing_office_ids)))}"]})
+
         try:
             complaint = Complaint.objects.create(**validated_data)
         except DjangoValidationError as exc:
@@ -230,24 +252,41 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
         for email in cc_emails:
             ComplaintCC.objects.get_or_create(complaint=complaint, email=email)
 
-        cc_officers = User.objects.filter(id__in=cc_officer_ids, role='officer')
+        cc_office_officer_ids = set()
+        if office_categories.exists():
+            cc_office_officer_ids.update(
+                CategoryResolver.objects.filter(
+                    category__in=office_categories,
+                    active=True,
+                ).values_list('officer_id', flat=True)
+            )
+
+        cc_officer_ids = {int(officer_id) for officer_id in cc_officer_ids}
+        cc_officer_ids.update(cc_office_officer_ids)
+
+        cc_officers = User.objects.filter(id__in=cc_officer_ids, role='officer').distinct()
+        seen_emails = set()
         for officer in cc_officers:
-            # Create CC record with officer's email
+            if not officer.email or officer.email in seen_emails:
+                continue
+
+            seen_emails.add(officer.email)
             ComplaintCC.objects.get_or_create(complaint=complaint, email=officer.email)
-            
-            # Create in-app notification
+
             Notification.objects.create(
                 user=officer,
                 complaint=complaint,
                 notification_type='complaint_update',
                 title=f"CC Complaint: {complaint.title}",
-                message=f"You were added as CC on complaint '{complaint.title}' by {complaint.submitted_by.first_name} {complaint.submitted_by.last_name}.",
+                message=(
+                    f"You were added as CC on complaint '{complaint.title}' "
+                    f"by {complaint.submitted_by.first_name} {complaint.submitted_by.last_name}."
+                ),
             )
-            
-            # Send email notification
+
             try:
                 EmailService.send_cc_complaint_notification(officer, complaint)
-            except Exception as e:
+            except Exception:
                 # Log error but don't fail the complaint creation
                 continue
 
@@ -282,7 +321,7 @@ class CCSerializer(serializers.ModelSerializer):
 
 
 class ComplaintSerializer(serializers.ModelSerializer):
-    submitted_by = ComplaintUserSerializer(read_only=True)
+    submitted_by = serializers.SerializerMethodField()
     category = CategorySerializer(read_only=True)
     assigned_officer = ComplaintUserSerializer(read_only=True)
     current_level = ResolverLevelSerializer(read_only=True)
@@ -298,9 +337,24 @@ class ComplaintSerializer(serializers.ModelSerializer):
             "created_at", "updated_at", "status",
             "submitter_campus", "submitter_college", "submitter_department",
             "assigned_officer", "current_level", "escalation_deadline",
-            "is_cc_user"
+            "is_cc_user", "is_anonymous"
         ]
         read_only_fields = ["complaint_id", "created_at", "updated_at", "escalation_deadline"]
+
+    def get_submitted_by(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if obj.is_anonymous and user and user.is_authenticated and user.is_officer() and not user.is_admin():
+            return {
+                'id': None,
+                'username': 'anonymous',
+                'email': '',
+                'first_name': 'Anonymous',
+                'last_name': 'Complainant',
+                'role': 'user',
+            }
+
+        return ComplaintUserSerializer(obj.submitted_by, context=self.context).data
 
     def get_is_cc_user(self, obj):
         """Check if the current user is CC'd on this complaint"""
@@ -362,18 +416,47 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 class PublicAnnouncementSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField(read_only=True)
+    likes_count = serializers.SerializerMethodField(read_only=True)
+    comments_count = serializers.SerializerMethodField(read_only=True)
+    liked_by_user = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = PublicAnnouncement
         fields = [
             "id", "title", "message", "created_by", "created_by_name",
-            "is_active", "is_pinned", "expires_at", "created_at", "updated_at"
+            "is_active", "is_pinned", "expires_at", "created_at", "updated_at",
+            "likes_count", "comments_count", "liked_by_user"
         ]
         read_only_fields = ["id", "created_by", "created_by_name", "created_at", "updated_at"]
 
     def get_created_by_name(self, obj):
         full_name = f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
         return full_name or obj.created_by.email
+
+    def get_likes_count(self, obj):
+        return obj.likes.count()
+
+    def get_comments_count(self, obj):
+        return obj.comments.count()
+
+    def get_liked_by_user(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.likes.filter(user=request.user).exists()
+
+
+class AnnouncementCommentSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = AnnouncementComment
+        fields = ["id", "announcement", "user", "user_name", "message", "created_at", "updated_at"]
+        read_only_fields = ["id", "announcement", "user", "user_name", "created_at", "updated_at"]
+
+    def get_user_name(self, obj):
+        full_name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return full_name or obj.user.email
 
 
 

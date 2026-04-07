@@ -79,8 +79,6 @@ class SystemLogger {
 }
 
 const systemLogger = new SystemLogger();
-
-// Initialize with system startup log
 systemLogger.info('System initialized', 'STARTUP');
 
 export default systemLogger;

@@ -47,7 +47,7 @@ const RegisterComplete = () => {
 
     apiService.getCampuses()
       .then((data) => setCampuses(data.results || data || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [accessToken, refreshToken]);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ const RegisterComplete = () => {
     setDepartments([]);
     apiService.getColleges(formData.user_campus)
       .then((data) => setColleges(data.results || data || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [formData.user_campus]);
 
   useEffect(() => {
@@ -73,7 +73,7 @@ const RegisterComplete = () => {
     setFormData(prev => ({ ...prev, department: '' }));
     apiService.getDepartments(formData.college)
       .then((data) => setDepartments(data.results || data || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [formData.college]);
 
   const handleChange = (e) => {
@@ -155,9 +155,8 @@ const RegisterComplete = () => {
     }
   };
 
-  const inputCls = `mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-    isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'
-  }`;
+  const inputCls = `mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300 placeholder-gray-500'
+    }`;
   const labelCls = `block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`;
 
   return (
@@ -217,7 +216,7 @@ const RegisterComplete = () => {
               </div>
 
               <div>
-                <label className={labelCls}>Gmail Account (for reset + notifications)</label>
+                <label className={labelCls}>Gmail Account </label>
                 <input
                   type="email"
                   name="gmail_account"

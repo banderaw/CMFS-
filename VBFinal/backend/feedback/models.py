@@ -30,6 +30,20 @@ class FeedbackTemplate(models.Model):
         (PRIORITY_MEDIUM, 'Medium'),
         (PRIORITY_HIGH, 'High'),
     ]
+
+    AUDIENCE_ALL = 'all'
+    AUDIENCE_CAMPUS = 'campus'
+    AUDIENCE_COLLEGE = 'college'
+    AUDIENCE_DEPARTMENT = 'department'
+    AUDIENCE_USERS = 'users'
+
+    AUDIENCE_SCOPE_CHOICES = [
+        (AUDIENCE_ALL, 'All Users'),
+        (AUDIENCE_CAMPUS, 'Campus'),
+        (AUDIENCE_COLLEGE, 'College'),
+        (AUDIENCE_DEPARTMENT, 'Department'),
+        (AUDIENCE_USERS, 'Specific Users'),
+    ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200)
@@ -42,6 +56,11 @@ class FeedbackTemplate(models.Model):
     office = models.CharField(max_length=100)  # Based on user's college
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default=PRIORITY_MEDIUM)
+    audience_scope = models.CharField(max_length=20, choices=AUDIENCE_SCOPE_CHOICES, default=AUDIENCE_ALL)
+    target_campus = models.ForeignKey('accounts.Campus', on_delete=models.SET_NULL, null=True, blank=True, related_name='feedback_templates')
+    target_college = models.ForeignKey('accounts.College', on_delete=models.SET_NULL, null=True, blank=True, related_name='feedback_templates')
+    target_department = models.ForeignKey('accounts.Department', on_delete=models.SET_NULL, null=True, blank=True, related_name='feedback_templates')
+    target_users = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='targeted_feedback_templates')
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -62,6 +81,65 @@ class FeedbackTemplate(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.office}"
+
+    def is_visible_to_user(self, user):
+        if self.status != self.STATUS_ACTIVE:
+            return False
+
+        if self.audience_scope == self.AUDIENCE_ALL:
+            return True
+
+        student_profile = getattr(user, 'student_profile', None)
+        officer_profile = getattr(user, 'officer_profile', None)
+
+        if self.audience_scope == self.AUDIENCE_CAMPUS:
+            if self.target_campus_id is None:
+                return False
+
+            if student_profile and student_profile.department_id:
+                college = student_profile.department.department_college
+                campus = college.college_campus if college else None
+                return bool(campus and campus.id == self.target_campus_id)
+
+            if officer_profile:
+                if officer_profile.college_id:
+                    campus = officer_profile.college.college_campus
+                    return bool(campus and campus.id == self.target_campus_id)
+                if officer_profile.department_id:
+                    college = officer_profile.department.department_college
+                    campus = college.college_campus if college else None
+                    return bool(campus and campus.id == self.target_campus_id)
+            return False
+
+        if self.audience_scope == self.AUDIENCE_COLLEGE:
+            if self.target_college_id is None:
+                return False
+
+            if student_profile and student_profile.department_id:
+                return student_profile.department.department_college_id == self.target_college_id
+
+            if officer_profile:
+                if officer_profile.college_id:
+                    return officer_profile.college_id == self.target_college_id
+                if officer_profile.department_id:
+                    return officer_profile.department.department_college_id == self.target_college_id
+            return False
+
+        if self.audience_scope == self.AUDIENCE_DEPARTMENT:
+            if self.target_department_id is None:
+                return False
+
+            if student_profile and student_profile.department_id:
+                return student_profile.department_id == self.target_department_id
+
+            if officer_profile and officer_profile.department_id:
+                return officer_profile.department_id == self.target_department_id
+            return False
+
+        if self.audience_scope == self.AUDIENCE_USERS:
+            return self.target_users.filter(id=user.id).exists()
+
+        return False
 
 
 class TemplateField(models.Model):
@@ -160,7 +238,6 @@ class FeedbackAnswer(models.Model):
     
     @property
     def value(self):
-        """Get the appropriate value based on field type"""
         if self.field.field_type == TemplateField.FIELD_TEXT:
             return self.text_value
         elif self.field.field_type == TemplateField.FIELD_NUMBER:

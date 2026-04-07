@@ -7,7 +7,15 @@ import authService from '../services/auth';
 import PublicNavbar from '../components/UI/PublicNavbar';
 import PublicFooter from '../components/UI/PublicFooter';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const normalizeApiBase = (rawBase) => {
+  const trimmed = (rawBase || '/api').trim().replace(/\/+$/, '');
+  if (trimmed === '/api' || trimmed.endsWith('/api')) {
+    return trimmed;
+  }
+  return `${trimmed}/api`;
+};
+
+const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL);
 
 const Login = () => {
   const { isDark } = useTheme();
@@ -134,7 +142,7 @@ const Login = () => {
                 </svg>
               </div>
               <h2 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Welcome Back!</h2>
-              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Sign in to access Gondar University CMFS</p>
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Sign in  UOG  CMFS</p>
             </div>
 
             {error && (
@@ -260,7 +268,7 @@ const Login = () => {
               </button>
 
               <p className={`text-xs text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Use your Gmail on the Forgot Password page for reset and notification emails.
+                Use  Gmail on the Forgot Password page for reset and notification emails.
               </p>
             </form>
 

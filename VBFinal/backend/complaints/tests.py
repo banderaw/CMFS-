@@ -1,8 +1,10 @@
+from datetime import timedelta
+
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from accounts.models import Officer, User
-from complaints.models import Category, Comment, Complaint, ComplaintCC, Response
+from complaints.models import Category, CategoryResolver, Comment, Complaint, ComplaintCC, Response, ResolverLevel
 
 
 class ComplaintSecurityAPITests(APITestCase):
@@ -16,10 +18,21 @@ class ComplaintSecurityAPITests(APITestCase):
         Officer.objects.create(user=self.officer_one, employee_id='EMP-001')
         Officer.objects.create(user=self.officer_two, employee_id='EMP-002')
 
+        self.resolver_level = ResolverLevel.objects.create(
+            name='Department',
+            level_order=1,
+            escalation_time=timedelta(hours=1),
+        )
+
         self.category = Category.objects.create(
             office_name='General Support',
             office_description='General complaint routing',
             office_scope=Category.SCOPE_GENERAL,
+        )
+        CategoryResolver.objects.create(
+            category=self.category,
+            level=self.resolver_level,
+            officer=self.officer_one,
         )
 
         self.assigned_complaint = Complaint.objects.create(
@@ -72,6 +85,25 @@ class ComplaintSecurityAPITests(APITestCase):
         created = Complaint.objects.get(title='Spoof attempt')
         self.assertEqual(created.submitted_by, self.user_one)
 
+    def test_complaint_creation_supports_cc_office_selections(self):
+        self.client.force_authenticate(user=self.user_one)
+
+        response = self.client.post(
+            reverse('complaint-list'),
+            {
+                'title': 'CC office complaint',
+                'description': 'Complaint with backend office CC selection',
+                'category': self.category.pk,
+                'cc_office_ids': [self.category.pk],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        created = Complaint.objects.get(title='CC office complaint')
+        cc_emails = list(created.cc_list.values_list('email', flat=True))
+        self.assertIn(self.officer_one.email, cc_emails)
+
     def test_complaint_list_scoping_for_admin_officer_user_and_cc(self):
         self.client.force_authenticate(user=self.admin)
         admin_response = self.client.get(reverse('complaint-list'))
@@ -93,6 +125,7 @@ class ComplaintSecurityAPITests(APITestCase):
             {
                 str(self.assigned_complaint.pk),
                 str(self.officer_visible_complaint.pk),
+                str(self.hidden_complaint.pk),
             },
         )
 

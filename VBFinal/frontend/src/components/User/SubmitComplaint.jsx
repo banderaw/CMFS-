@@ -8,30 +8,70 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
   const { language, t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [categoryResolvers, setCategoryResolvers] = useState([]);
   const [complaintForm, setComplaintForm] = useState({
     title: '',
     description: '',
-    category: ''
+    category: '',
+    isAnonymous: false,
   });
   const [files, setFiles] = useState([]);
   const [formErrors, setFormErrors] = useState({});
   const [currentStep, setCurrentStep] = useState(1);
-  const [officers, setOfficers] = useState([]);
-  const [ccOfficerIds, setCcOfficerIds] = useState([]);
+  const [ccOfficeIds, setCcOfficeIds] = useState([]);
   const totalSteps = 4;
+
+  const getCategoryId = (category) => String(category.category_id || category.id || '');
+
+  const buildCategoryLabel = useCallback((category, map, visited = new Set()) => {
+    const categoryId = getCategoryId(category);
+    if (!categoryId || visited.has(categoryId)) {
+      return category.name || category.office_name || category.category_id;
+    }
+
+    visited.add(categoryId);
+    const parentId = String(category.parent || '');
+    const currentName = category.name || category.office_name || category.category_id;
+    if (!parentId || !map[parentId]) {
+      return currentName;
+    }
+
+    const parentLabel = buildCategoryLabel(map[parentId], map, visited);
+    return `${parentLabel} > ${currentName}`;
+  }, []);
 
   const loadCategories = useCallback(async () => {
     try {
-      const response = await apiService.getCategoriesByLanguage(language);
-      setCategories(response || []);
+      const categoriesResponse = await apiService.getAllCategories();
+      const rawCategories = (categoriesResponse?.results || categoriesResponse || [])
+        .filter((item) => item && item.is_active !== false);
+      const categoryMap = rawCategories.reduce((acc, item) => {
+        acc[String(item.category_id || item.id)] = item;
+        return acc;
+      }, {});
 
-      const usersData = await apiService.getAllUsers();
-      const allUsers = usersData?.results || usersData || [];
-      setOfficers(allUsers.filter((u) => u.role === 'officer'));
+      const categoryOptions = rawCategories
+        .map((item) => ({
+          ...item,
+          label: buildCategoryLabel(item, categoryMap),
+          value: getCategoryId(item),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+      setCategories(categoryOptions);
     } catch (error) {
       console.error('Failed to load categories:', error);
     }
-  }, [language]);
+
+    try {
+      const resolverData = await apiService.getAllCategoryResolvers();
+      setCategoryResolvers(resolverData?.results || resolverData || []);
+    } catch (error) {
+      console.warn('Failed to load category resolvers:', error);
+      setCategoryResolvers([]);
+    }
+
+  }, [buildCategoryLabel]);
 
   useEffect(() => {
     loadCategories();
@@ -51,12 +91,19 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
   };
 
   const clearForm = () => {
-    setComplaintForm({ title: '', description: '', category: '' });
+    setComplaintForm({ title: '', description: '', category: '', isAnonymous: false });
     setFiles([]);
-    setCcOfficerIds([]);
+    setCcOfficeIds([]);
     setFormErrors({});
     setCurrentStep(1);
   };
+
+  const categoryOfficers = categoryResolvers
+    .filter((resolver) => String(resolver.category) === String(complaintForm.category) && resolver.active)
+    .sort((a, b) => (a.level_name || '').localeCompare(b.level_name || ''));
+
+  const ccOfficeOptions = categories;
+  const selectedCcOffices = ccOfficeOptions.filter((office) => ccOfficeIds.includes(office.value));
 
   const validateStep = (step) => {
     const errors = validateForm();
@@ -101,12 +148,9 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const toggleCcOfficer = (officerId) => {
-    setCcOfficerIds((prev) => (
-      prev.includes(officerId)
-        ? prev.filter((id) => id !== officerId)
-        : [...prev, officerId]
-    ));
+  const handleCcOfficeChange = (event) => {
+    const selectedOfficeIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+    setCcOfficeIds(selectedOfficeIds);
   };
 
   const submitComplaint = async (e) => {
@@ -127,10 +171,11 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
       formData.append('title', complaintForm.title);
       formData.append('description', complaintForm.description);
       formData.append('category', complaintForm.category);
+      formData.append('is_anonymous', complaintForm.isAnonymous ? 'true' : 'false');
 
-      // CC officers as JSON
-      if (ccOfficerIds.length > 0) {
-        formData.append('cc_officer_ids', JSON.stringify(ccOfficerIds));
+      // CC backend offices as JSON
+      if (ccOfficeIds.length > 0) {
+        formData.append('cc_office_ids', JSON.stringify(ccOfficeIds));
       }
 
       // Add files to form data
@@ -255,43 +300,89 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
                   >
                     <option value="">{language === 'am' ? 'ምድብ ይምረጡ' : 'Select category'}</option>
                     {categories.map((cat) => (
-                      <option key={cat.category_id} value={cat.category_id}>
-                        {cat.name}
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
                       </option>
                     ))}
                   </select>
                   {formErrors.category && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.category}</p>}
                 </div>
 
+                <div className={`rounded-lg border p-3 ${isDark ? 'border-gray-600 bg-gray-800' : 'border-blue-200 bg-blue-50'}`}>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-300' : 'text-blue-700'}`}>
+                    {language === 'am' ? 'የተመደቡ መፍትሄ ኦፊሰሮች' : 'Assigned Resolver Officers'}
+                  </p>
+                  {complaintForm.category ? (
+                    categoryOfficers.length > 0 ? (
+                      <ul className={`mt-2 space-y-1 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                        {categoryOfficers.map((resolver) => (
+                          <li key={resolver.id}>
+                            {resolver.level_name}: {resolver.officer_name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {language === 'am' ? 'ለዚህ ምድብ ገና ኦፊሰር አልተመደበም።' : 'No resolver officers are assigned to this category yet.'}
+                      </p>
+                    )
+                  ) : (
+                    <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {language === 'am' ? 'እባክዎ መጀመሪያ ምድብ ይምረጡ።' : 'Select a category first to preview responsible officers.'}
+                    </p>
+                  )}
+                </div>
+
+                <label className={`flex items-start gap-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                  <input
+                    type="checkbox"
+                    checked={complaintForm.isAnonymous}
+                    onChange={(e) => setComplaintForm({ ...complaintForm, isAnonymous: e.target.checked })}
+                  />
+                  <span>
+                    {language === 'am'
+                      ? 'ቅሬታዬን በማንነት ሳይገለጽ እንዲታይ እፈልጋለሁ (ለኦፊሰሮች ብቻ ማንነት ይደበቃል)'
+                      : 'Submit as anonymous to officers (your identity is hidden from officers but preserved for audit/admin).'}
+                  </span>
+                </label>
+
                 <div>
                   <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
-                    {language === 'am' ? 'CC ኦፊሰሮች ይምረጡ' : 'CC Officers (Select one or more)'}
+                    {language === 'am' ? 'CC የቢሮ አማራጮች ይምረጡ' : 'CC Backend Offices (Select one or more)'}
                   </label>
-                  <div className={`w-full border rounded-lg px-3 py-3 max-h-52 overflow-y-auto ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
-                    {officers.length === 0 ? (
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {language === 'am' ? 'ኦፊሰሮች አልተገኙም' : 'No officers found'}
-                      </p>
+                  <select
+                    multiple
+                    value={ccOfficeIds}
+                    onChange={handleCcOfficeChange}
+                    className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors min-h-40 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    {ccOfficeOptions.length === 0 ? (
+                      <option value="">{language === 'am' ? 'ቢሮዎች አልተገኙም' : 'No backend offices found'}</option>
                     ) : (
-                      <div className="space-y-2">
-                        {officers.map((officer) => (
-                          <label key={officer.id} className={`flex items-start gap-2 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                            <input
-                              type="checkbox"
-                              checked={ccOfficerIds.includes(officer.id)}
-                              onChange={() => toggleCcOfficer(officer.id)}
-                            />
-                            <span>{officer.first_name} {officer.last_name} ({officer.email})</span>
-                          </label>
-                        ))}
-                      </div>
+                      ccOfficeOptions.map((office) => (
+                        <option key={office.value} value={office.value}>
+                          {office.label}
+                        </option>
+                      ))
                     )}
-                  </div>
+                  </select>
                   <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                     {language === 'am'
-                      ? `የተመረጡ ኦፊሰሮች: ${ccOfficerIds.length}`
-                      : `Selected officers: ${ccOfficerIds.length}`}
+                      ? `የተመረጡ ቢሮዎች: ${ccOfficeIds.length}`
+                      : `Selected backend offices: ${ccOfficeIds.length}`}
                   </p>
+                  {selectedCcOffices.length > 0 && (
+                    <div className={`mt-2 flex flex-wrap gap-2 text-xs ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                      {selectedCcOffices.map((office) => (
+                        <span
+                          key={office.value}
+                          className={`rounded-full px-3 py-1 ${isDark ? 'bg-gray-700' : 'bg-blue-100 text-blue-700'}`}
+                        >
+                          {office.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -372,9 +463,10 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
                     <p><span className="font-semibold">{t('description')}:</span> {complaintForm.description || '-'}</p>
                     <p>
                       <span className="font-semibold">{language === 'am' ? 'ምድብ' : 'Category'}:</span>{' '}
-                      {categories.find((item) => String(item.category_id) === String(complaintForm.category))?.name || '-'}
+                      {categories.find((item) => String(item.value) === String(complaintForm.category))?.label || '-'}
                     </p>
-                    <p><span className="font-semibold">{language === 'am' ? 'CC ኦፊሰሮች' : 'CC Officers'}:</span> {ccOfficerIds.length}</p>
+                    <p><span className="font-semibold">{language === 'am' ? 'ማንነት ሁኔታ' : 'Identity'}:</span> {complaintForm.isAnonymous ? (language === 'am' ? 'ስውር' : 'Anonymous') : (language === 'am' ? 'ተገልጿል' : 'Visible')}</p>
+                    <p><span className="font-semibold">{language === 'am' ? 'CC ቢሮዎች' : 'CC Backend Offices'}:</span> {ccOfficeIds.length}</p>
                     <p><span className="font-semibold">{language === 'am' ? 'ፋይሎች' : 'Attachments'}:</span> {files.length}</p>
                   </div>
                 </div>

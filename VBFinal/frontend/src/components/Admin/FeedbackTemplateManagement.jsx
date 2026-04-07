@@ -23,12 +23,40 @@ const FeedbackTemplateManagement = () => {
     title: '',
     description: '',
     priority: 'medium',
+    audience_scope: 'all',
+    target_campus: '',
+    target_college: '',
+    target_department: '',
+    target_user_ids: [],
     fields: [defaultField()]
   });
+  const [campuses, setCampuses] = useState([]);
+  const [colleges, setColleges] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [users, setUsers] = useState([]);
 
   useEffect(() => {
     loadTemplates();
+    loadAudienceOptions();
   }, []);
+
+  const loadAudienceOptions = async () => {
+    try {
+      const [campusesData, collegesData, departmentsData, usersData] = await Promise.all([
+        apiService.getCampuses(),
+        apiService.getColleges(),
+        apiService.getDepartments(),
+        apiService.getAllUsers(),
+      ]);
+
+      setCampuses(campusesData.results || campusesData || []);
+      setColleges(collegesData.results || collegesData || []);
+      setDepartments(departmentsData.results || departmentsData || []);
+      setUsers((usersData.results || usersData || []).filter((user) => user.is_active));
+    } catch (loadError) {
+      console.error('Failed to load audience options:', loadError);
+    }
+  };
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -51,6 +79,11 @@ const FeedbackTemplateManagement = () => {
       title: '',
       description: '',
       priority: 'medium',
+      audience_scope: 'all',
+      target_campus: '',
+      target_college: '',
+      target_department: '',
+      target_user_ids: [],
       fields: [defaultField()]
     });
   };
@@ -94,11 +127,33 @@ const FeedbackTemplateManagement = () => {
       return;
     }
 
+    if (newTemplate.audience_scope === 'campus' && !newTemplate.target_campus) {
+      alert('Please select target campus');
+      return;
+    }
+    if (newTemplate.audience_scope === 'college' && !newTemplate.target_college) {
+      alert('Please select target college');
+      return;
+    }
+    if (newTemplate.audience_scope === 'department' && !newTemplate.target_department) {
+      alert('Please select target department');
+      return;
+    }
+    if (newTemplate.audience_scope === 'users' && newTemplate.target_user_ids.length === 0) {
+      alert('Please select at least one target user');
+      return;
+    }
+
     try {
       await apiService.createFeedbackTemplate({
         title: newTemplate.title.trim(),
         description: newTemplate.description.trim(),
         priority: newTemplate.priority,
+        audience_scope: newTemplate.audience_scope,
+        target_campus: newTemplate.target_campus || null,
+        target_college: newTemplate.target_college || null,
+        target_department: newTemplate.target_department || null,
+        target_user_ids: newTemplate.audience_scope === 'users' ? newTemplate.target_user_ids : [],
         fields: newTemplate.fields.map(({ id: _id, ...field }, index) => ({
           ...field,
           options: field.field_type === 'choice' || field.field_type === 'checkbox' ? field.options.filter(Boolean) : [],
@@ -174,6 +229,14 @@ const FeedbackTemplateManagement = () => {
     }
   };
 
+  const getAudienceSummary = (template) => {
+    if (template.audience_scope === 'campus') return `Campus: ${template.target_campus_name || 'N/A'}`;
+    if (template.audience_scope === 'college') return `College: ${template.target_college_name || 'N/A'}`;
+    if (template.audience_scope === 'department') return `Department: ${template.target_department_name || 'N/A'}`;
+    if (template.audience_scope === 'users') return `Specific users: ${(template.target_user_ids || []).length}`;
+    return 'All users';
+  };
+
   return (
     <div className="space-y-6">
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
@@ -182,9 +245,6 @@ const FeedbackTemplateManagement = () => {
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               Feedback Template Management
             </h3>
-            <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Manage backend feedback templates and approval workflow
-            </p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -202,12 +262,12 @@ const FeedbackTemplateManagement = () => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-        <StatCard isDark={isDark} label="Active" value={templates.filter(t => t.status === 'active').length} icon="âœ…" color="text-green-500" />
-        <StatCard isDark={isDark} label="Pending" value={templates.filter(t => t.status === 'pending').length} icon="â³" color="text-yellow-500" />
-        <StatCard isDark={isDark} label="Inactive" value={templates.filter(t => t.status === 'inactive').length} icon="â¸ï¸" color="text-gray-500" />
-        <StatCard isDark={isDark} label="Closed" value={templates.filter(t => t.status === 'closed').length} icon="ðŸ”’" color="text-red-500" />
-        <StatCard isDark={isDark} label="By Officers" value={templates.filter(t => t.created_by_role === 'officer').length} icon="ðŸ‘®" color="text-orange-500" />
-        <StatCard isDark={isDark} label="Total" value={templates.length} icon="ðŸ“" color="text-indigo-500" />
+        <StatCard isDark={isDark} label="Active" value={templates.filter(t => t.status === 'active').length} color="text-green-500" />
+        <StatCard isDark={isDark} label="Pending" value={templates.filter(t => t.status === 'pending').length} color="text-yellow-500" />
+        <StatCard isDark={isDark} label="Inactive" value={templates.filter(t => t.status === 'inactive').length} color="text-gray-500" />
+        <StatCard isDark={isDark} label="Closed" value={templates.filter(t => t.status === 'closed').length} color="text-red-500" />
+        <StatCard isDark={isDark} label="By Officers" value={templates.filter(t => t.created_by_role === 'officer').length} color="text-orange-500" />
+        <StatCard isDark={isDark} label="Total" value={templates.length} color="text-indigo-500" />
       </div>
 
       {templates.filter(t => t.created_by_role === 'officer').length > 0 && (
@@ -293,7 +353,6 @@ const FeedbackTemplateManagement = () => {
           </div>
         ) : filteredTemplates.length === 0 ? (
           <div className="p-6 text-center">
-            <div className="text-4xl mb-2">ðŸ“</div>
             <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
               No templates found for {selectedOfficer !== 'all' ? `"${selectedOfficer}"` : `"${filterType.replace('_', ' ')}"`}
             </p>
@@ -333,6 +392,9 @@ const FeedbackTemplateManagement = () => {
                       </span>
                       <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Fields: {template.fields?.length || 0}
+                      </span>
+                      <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Audience: {getAudienceSummary(template)}
                       </span>
                       <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Created: {new Date(template.created_at).toLocaleString()}
@@ -448,6 +510,110 @@ const FeedbackTemplateManagement = () => {
                   <option value="high">High</option>
                 </select>
               </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                  Audience Scope
+                </label>
+                <select
+                  value={newTemplate.audience_scope}
+                  onChange={(e) => setNewTemplate(prev => ({
+                    ...prev,
+                    audience_scope: e.target.value,
+                    target_campus: e.target.value === 'campus' ? prev.target_campus : '',
+                    target_college: e.target.value === 'college' ? prev.target_college : '',
+                    target_department: e.target.value === 'department' ? prev.target_department : '',
+                    target_user_ids: e.target.value === 'users' ? prev.target_user_ids : [],
+                  }))}
+                  className={`w-full p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                >
+                  <option value="all">All Users</option>
+                  <option value="campus">Campus</option>
+                  <option value="college">College</option>
+                  <option value="department">Department</option>
+                  <option value="users">Specific Users</option>
+                </select>
+              </div>
+
+              {newTemplate.audience_scope === 'campus' && (
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                    Target Campus
+                  </label>
+                  <select
+                    value={newTemplate.target_campus}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, target_campus: e.target.value }))}
+                    className={`w-full p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    <option value="">Select Campus</option>
+                    {campuses.map((campus) => (
+                      <option key={campus.id} value={campus.id}>{campus.campus_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {newTemplate.audience_scope === 'college' && (
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                    Target College
+                  </label>
+                  <select
+                    value={newTemplate.target_college}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, target_college: e.target.value }))}
+                    className={`w-full p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    <option value="">Select College</option>
+                    {colleges.map((college) => (
+                      <option key={college.id} value={college.id}>{college.college_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {newTemplate.audience_scope === 'department' && (
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                    Target Department
+                  </label>
+                  <select
+                    value={newTemplate.target_department}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, target_department: e.target.value }))}
+                    className={`w-full p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((department) => (
+                      <option key={department.id} value={department.id}>{department.department_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {newTemplate.audience_scope === 'users' && (
+                <div>
+                  <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+                    Target Users
+                  </label>
+                  <div className={`max-h-40 overflow-y-auto p-2 border rounded ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}>
+                    {users.map((user) => (
+                      <label key={user.id} className={`flex items-center gap-2 text-sm mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <input
+                          type="checkbox"
+                          checked={newTemplate.target_user_ids.includes(user.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewTemplate(prev => ({ ...prev, target_user_ids: [...prev.target_user_ids, user.id] }));
+                            } else {
+                              setNewTemplate(prev => ({ ...prev, target_user_ids: prev.target_user_ids.filter((id) => id !== user.id) }));
+                            }
+                          }}
+                        />
+                        <span>{user.first_name} {user.last_name} ({user.email})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">

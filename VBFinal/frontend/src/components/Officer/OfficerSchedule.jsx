@@ -36,7 +36,7 @@ const OfficerSchedule = () => {
         setAppointments(Array.isArray(allAppointments) ? allAppointments : []);
         setComplaints(
           Array.isArray(allComplaints)
-            ? allComplaints.filter(complaint => complaint.assigned_officer?.id === user?.id && complaint.status !== 'closed')
+            ? allComplaints.filter((complaint) => complaint.status !== 'closed')
             : []
         );
       } catch {
@@ -111,21 +111,23 @@ const OfficerSchedule = () => {
           <h3 className={`text-base font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>New Appointment</h3>
           {error && <p className="mb-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
           {complaints.length === 0 && (
-            <p className="mb-3 text-sm text-yellow-600">No assigned complaints available to schedule.</p>
+            <p className="mb-3 text-sm text-yellow-600">No open complaints available to schedule.</p>
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Complaint *</label>
+              <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Complaint </label>
               <select required value={form.complaint} onChange={e => setForm(prev => ({ ...prev, complaint: e.target.value }))} className={inputCls}>
                 <option value="">Select a complaint</option>
                 {complaints.map(complaint => (
-                  <option key={complaint.complaint_id} value={complaint.complaint_id}>{complaint.title}</option>
+                  <option key={complaint.complaint_id} value={complaint.complaint_id}>
+                    {complaint.title} ({complaint.status.replace('_', ' ')})
+                  </option>
                 ))}
               </select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Date & Time *</label>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Date and  Time </label>
                 <input
                   required
                   type="datetime-local"
@@ -138,7 +140,7 @@ const OfficerSchedule = () => {
                 <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Location</label>
                 <input
                   type="text"
-                  placeholder="e.g. Office 204, Admin Block"
+                  placeholder="e.g. Office 204,  T-09"
                   value={form.location}
                   onChange={e => setForm(prev => ({ ...prev, location: e.target.value }))}
                   className={inputCls}
@@ -168,7 +170,6 @@ const OfficerSchedule = () => {
 
       {appointments.length === 0 ? (
         <div className={`${cardCls} text-center py-12`}>
-          <div className="text-4xl mb-3">ðŸ“…</div>
           <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>No appointments scheduled</p>
           <p className={`text-sm mt-1 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Create a schedule for a complaint to notify the user</p>
         </div>
@@ -180,9 +181,9 @@ const OfficerSchedule = () => {
                 <div className="flex-1 min-w-0">
                   <p className={`font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{appointment.complaint_title}</p>
                   <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    <span>ðŸ“… {new Date(appointment.scheduled_at).toLocaleString()}</span>
-                    {appointment.location && <span>ðŸ“ {appointment.location}</span>}
-                    {appointment.requested_by && <span>ðŸ‘¤ Scheduled by {appointment.requested_by.first_name} {appointment.requested_by.last_name}</span>}
+                    <span> {new Date(appointment.scheduled_at).toLocaleString()}</span>
+                    {appointment.location && <span> {appointment.location}</span>}
+                    {appointment.requested_by && <span> Scheduled by {appointment.requested_by.first_name} {appointment.requested_by.last_name}</span>}
                   </div>
                   {appointment.note && <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{appointment.note}</p>}
                 </div>

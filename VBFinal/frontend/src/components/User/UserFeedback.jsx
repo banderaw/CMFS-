@@ -97,7 +97,7 @@ const UserFeedback = () => {
           onClick={handleBackToList}
           className="mb-6 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
         >
-          â† Back to Forms
+          Back to Forms
         </button>
 
         <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-8">
@@ -112,9 +112,8 @@ const UserFeedback = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             {selectedTemplate.fields.map(field => (
               <div key={field.id} className="space-y-2">
-                <label className={`block font-semibold text-lg ${
-                  field.is_required ? 'text-red-600' : 'text-gray-700'
-                }`}>
+                <label className={`block font-semibold text-lg ${field.is_required ? 'text-red-600' : 'text-gray-700'
+                  }`}>
                   {field.label}
                   {field.is_required && <span className="text-red-500 ml-1">*</span>}
                 </label>
@@ -147,7 +146,6 @@ const UserFeedback = () => {
       <div className="p-6">
         <div className="max-w-2xl mx-auto text-center">
           <div className="bg-green-50 border border-green-200 rounded-lg p-8">
-            <div className="text-6xl mb-4">âœ…</div>
             <h2 className="text-2xl font-bold text-green-800 mb-4">Thank You!</h2>
             <p className="text-green-700 mb-6">Your feedback has been submitted successfully.</p>
             <button
@@ -166,7 +164,6 @@ const UserFeedback = () => {
     <div className="p-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Available Feedback Forms</h1>
-        <p className="text-gray-600">Select a form to provide your anonymous feedback</p>
       </div>
 
       {loading ? (
@@ -204,9 +201,7 @@ const UserFeedback = () => {
 
       {templates.length === 0 && !loading && (
         <div className="text-center py-16 text-gray-600">
-          <div className="text-6xl mb-4">ðŸ“</div>
           <p className="text-xl mb-2">No feedback forms available</p>
-          <p>Check back later for new forms from your office</p>
         </div>
       )}
     </div>
@@ -244,12 +239,11 @@ const FieldInput = ({ field, value, onChange }) => {
             <button
               key={star}
               type="button"
-              className={`text-3xl transition-all ${
-                value >= star ? 'text-yellow-400 scale-110' : 'text-gray-300 hover:text-yellow-200'
-              }`}
+              className={`text-3xl transition-all ${value >= star ? 'text-yellow-400 scale-110' : 'text-gray-300 hover:text-yellow-200'
+                }`}
               onClick={() => onChange(star)}
             >
-              â­
+              ★
             </button>
           ))}
           {value && (

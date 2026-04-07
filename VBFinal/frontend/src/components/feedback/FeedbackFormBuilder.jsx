@@ -1,18 +1,51 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import apiService from '../../services/api';
 
 const FIELD_TYPES = [
-  { type: 'text', label: 'Text Input', icon: 'ðŸ“' },
-  { type: 'number', label: 'Number Input', icon: 'ðŸ”¢' },
-  { type: 'rating', label: 'Rating Scale', icon: 'â­' },
-  { type: 'choice', label: 'Multiple Choice', icon: 'ðŸ”˜' },
-  { type: 'checkbox', label: 'Checkboxes', icon: 'â˜‘ï¸' }
+  { type: 'text', label: 'Text Input' },
+  { type: 'number', label: 'Number Input' },
+  { type: 'rating', label: 'Rating Scale' },
+  { type: 'choice', label: 'Multiple Choice' },
+  { type: 'checkbox', label: 'Checkboxes' }
 ];
 
 const FeedbackFormBuilder = ({ onSave }) => {
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
   const [fields, setFields] = useState([]);
+  const [audienceScope, setAudienceScope] = useState('all');
+  const [targetCampus, setTargetCampus] = useState('');
+  const [targetCollege, setTargetCollege] = useState('');
+  const [targetDepartment, setTargetDepartment] = useState('');
+  const [targetUserIds, setTargetUserIds] = useState([]);
+  const [campuses, setCampuses] = useState([]);
+  const [colleges, setColleges] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    const loadTargetOptions = async () => {
+      try {
+        const [campusesData, collegesData, departmentsData, usersData] = await Promise.all([
+          apiService.getCampuses(),
+          apiService.getColleges(),
+          apiService.getDepartments(),
+          apiService.getAllUsers(),
+        ]);
+        setCampuses(campusesData.results || campusesData || []);
+        setColleges(collegesData.results || collegesData || []);
+        setDepartments(departmentsData.results || departmentsData || []);
+
+        const fetchedUsers = usersData.results || usersData || [];
+        // Some API responses omit is_active; keep users selectable unless explicitly inactive.
+        setUsers(fetchedUsers.filter((user) => user.is_active !== false));
+      } catch (error) {
+        console.error('Failed to load audience options:', error);
+      }
+    };
+
+    loadTargetOptions();
+  }, []);
 
   const addField = (fieldType) => {
     const newField = {
@@ -61,9 +94,35 @@ const FeedbackFormBuilder = ({ onSave }) => {
       return;
     }
 
+    if (audienceScope === 'campus' && !targetCampus) {
+      alert('Please select a target campus');
+      return;
+    }
+    if (audienceScope === 'college' && !targetCollege) {
+      alert('Please select a target college');
+      return;
+    }
+    if (audienceScope === 'department' && !targetDepartment) {
+      alert('Please select a target department');
+      return;
+    }
+    if (audienceScope === 'users' && targetUserIds.length === 0) {
+      alert('Please select at least one target user');
+      return;
+    }
+
+    const normalizedTargetUserIds = targetUserIds
+      .map((id) => Number.parseInt(id, 10))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
     const templateData = {
       title: formTitle,
       description: formDescription,
+      audience_scope: audienceScope,
+      target_campus: targetCampus || null,
+      target_college: targetCollege || null,
+      target_department: targetDepartment || null,
+      target_user_ids: audienceScope === 'users' ? normalizedTargetUserIds : [],
       fields: fields.map(({ id: _id, ...field }) => field)
     };
 
@@ -93,6 +152,94 @@ const FeedbackFormBuilder = ({ onSave }) => {
           onChange={(e) => setFormDescription(e.target.value)}
           className="w-full min-h-20 p-3 border-2 border-gray-300 rounded-lg resize-y"
         />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Audience Scope</label>
+            <select
+              value={audienceScope}
+              onChange={(e) => {
+                const nextScope = e.target.value;
+                setAudienceScope(nextScope);
+                if (nextScope !== 'campus') setTargetCampus('');
+                if (nextScope !== 'college') setTargetCollege('');
+                if (nextScope !== 'department') setTargetDepartment('');
+                if (nextScope !== 'users') setTargetUserIds([]);
+              }}
+              className="w-full p-2 border-2 border-gray-300 rounded-lg"
+            >
+              <option value="all">All Users</option>
+              <option value="campus">Campus</option>
+              <option value="college">College</option>
+              <option value="department">Department</option>
+              <option value="users">Specific Users</option>
+            </select>
+          </div>
+
+          {audienceScope === 'campus' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Campus</label>
+              <select value={targetCampus} onChange={(e) => setTargetCampus(e.target.value)} className="w-full p-2 border-2 border-gray-300 rounded-lg">
+                <option value="">Select campus</option>
+                {campuses.map((campus) => (
+                  <option key={campus.id} value={campus.id}>{campus.campus_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {audienceScope === 'college' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target College</label>
+              <select value={targetCollege} onChange={(e) => setTargetCollege(e.target.value)} className="w-full p-2 border-2 border-gray-300 rounded-lg">
+                <option value="">Select college</option>
+                {colleges.map((college) => (
+                  <option key={college.id} value={college.id}>{college.college_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {audienceScope === 'department' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Department</label>
+              <select value={targetDepartment} onChange={(e) => setTargetDepartment(e.target.value)} className="w-full p-2 border-2 border-gray-300 rounded-lg">
+                <option value="">Select department</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>{department.department_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {audienceScope === 'users' && (
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Target Users</label>
+              <div className="max-h-40 overflow-y-auto border-2 border-gray-300 rounded-lg p-3 bg-white">
+                {users.map((user) => (
+                  <label key={user.id} className="flex items-center gap-2 text-sm mb-1">
+                    <input
+                      type="checkbox"
+                      checked={targetUserIds.includes(String(user.id))}
+                      onChange={(e) => {
+                        const userId = String(user.id);
+                        if (e.target.checked) {
+                          setTargetUserIds((prev) => (prev.includes(userId) ? prev : [...prev, userId]));
+                        } else {
+                          setTargetUserIds((prev) => prev.filter((id) => id !== userId));
+                        }
+                      }}
+                    />
+                    <span>{user.first_name} {user.last_name} ({user.email})</span>
+                  </label>
+                ))}
+                {users.length === 0 && (
+                  <p className="text-sm text-gray-500">No active users available for targeting.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-8">
@@ -104,7 +251,7 @@ const FeedbackFormBuilder = ({ onSave }) => {
               onClick={() => addField(fieldType.type)}
               className="block w-full p-3 mb-3 bg-white border-2 border-blue-500 rounded-lg cursor-pointer transition-all hover:bg-blue-500 hover:text-white"
             >
-              {fieldType.icon} {fieldType.label}
+              {fieldType.label}
             </button>
           ))}
         </div>
@@ -165,6 +312,15 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
     onUpdate({ options: newOptions });
   };
 
+  const moveOption = (optionIndex, direction) => {
+    const targetIndex = direction === 'up' ? optionIndex - 1 : optionIndex + 1;
+    if (targetIndex < 0 || targetIndex >= field.options.length) return;
+
+    const newOptions = [...field.options];
+    [newOptions[optionIndex], newOptions[targetIndex]] = [newOptions[targetIndex], newOptions[optionIndex]];
+    onUpdate({ options: newOptions });
+  };
+
   return (
     <div className="w-full">
       <div className="flex justify-between items-center mb-3">
@@ -180,14 +336,14 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
             disabled={index === 0}
             className="px-2 py-1 bg-gray-500 text-white rounded disabled:opacity-50"
           >
-            â†‘
+            Up
           </button>
           <button
             onClick={() => onMove('down')}
             disabled={index === totalFields - 1}
             className="px-2 py-1 bg-gray-500 text-white rounded disabled:opacity-50"
           >
-            â†“
+            Down
           </button>
           <label className="flex items-center">
             <input
@@ -198,7 +354,12 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
             />
             Required
           </label>
-          <button onClick={onRemove} className="text-lg">âŒ</button>
+          <button
+            onClick={onRemove}
+            className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Delete
+          </button>
         </div>
       </div>
 
@@ -212,6 +373,20 @@ const FieldEditor = ({ field, index, totalFields, onUpdate, onRemove, onMove }) 
                 onChange={(e) => updateOption(index, e.target.value)}
                 className="flex-1 p-1 border border-gray-300 rounded"
               />
+              <button
+                onClick={() => moveOption(index, 'up')}
+                disabled={index === 0}
+                className="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50"
+              >
+                Up
+              </button>
+              <button
+                onClick={() => moveOption(index, 'down')}
+                disabled={index === field.options.length - 1}
+                className="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50"
+              >
+                Down
+              </button>
               <button
                 onClick={() => removeOption(index)}
                 className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
@@ -246,7 +421,7 @@ const FieldPreview = ({ field }) => {
       return (
         <div className="flex">
           {[1, 2, 3, 4, 5].map(star => (
-            <span key={star} className="text-2xl">â­</span>
+            <span key={star} className="text-2xl"> </span>
           ))}
         </div>
       );

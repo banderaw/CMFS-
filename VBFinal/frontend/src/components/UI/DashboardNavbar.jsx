@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -30,7 +30,7 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
   };
 
   return (
-    <header className={`${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-100'} backdrop-blur-md shadow-md border-b fixed top-0 left-0 right-0 z-50`}>
+    <header className={`${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-100'} backdrop-blur-md shadow-md border-b sticky top-0 left-0 right-0 z-50 w-full`}>
       <nav className="px-6 sm:px-8 lg:px-12 h-20 flex items-center justify-between">
         {/* Left: Logo and Sidebar Toggle */}
         <div className="flex items-center space-x-6 min-w-0">
@@ -53,10 +53,10 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
               </div>
               <div>
                 <h1 className={`text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  CMFS
+                  CMFTS
                 </h1>
                 <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Management System
+                  System
                 </p>
               </div>
             </div>
@@ -65,48 +65,43 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
 
         {/* Center: Navigation Links */}
         <div className="hidden lg:flex items-center space-x-1">
-          <a
-            href={getDashboardPath()}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              location.pathname === getDashboardPath()
-                ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
-                : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
+          <Link
+            to={getDashboardPath()}
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${location.pathname === getDashboardPath()
+              ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
+              : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
           >
             Dashboard
-          </a>
-          <a
-            href="/landing"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
+          </Link>
+          <Link
+            to="/landing"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
           >
             Home
-          </a>
-          <a
-            href="/landing#features"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
+          </Link>
+          <Link
+            to="/landing#features"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
           >
             Features
-          </a>
-          <a
-            href="/landing#about"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
+          </Link>
+          <Link
+            to="/landing#about"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
           >
             About
-          </a>
-          <a
-            href="/landing#contact"
-            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${
-              isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
+          </Link>
+          <Link
+            to="/landing#contact"
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
           >
             Contact
-          </a>
+          </Link>
         </div>
 
         {/* Right: Theme Toggle and User Menu */}
@@ -163,8 +158,8 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
                   </p>
                 </div>
                 <div className="py-2">
-                  <a
-                    href={getDashboardPath()}
+                  <Link
+                    to={getDashboardPath()}
                     onClick={() => setDropdownOpen(false)}
                     className={`flex items-center px-5 py-2.5 text-sm font-medium transition-colors duration-150 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'}`}
                   >
@@ -172,7 +167,7 @@ const DashboardNavbar = ({ onSidebarToggle }) => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Profile Settings
-                  </a>
+                  </Link>
                 </div>
                 <div className={`border-t ${isDark ? 'border-gray-700' : 'border-gray-100'} py-2`}>
                   <button

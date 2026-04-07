@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import apiService from '../../services/api';
+import { openRealtimeSocket } from '../../services/realtime';
 
 const Notifications = ({ setUnreadCount }) => {
   const { isDark } = useTheme();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const socketRef = useRef(null);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -56,6 +58,29 @@ const Notifications = ({ setUnreadCount }) => {
   }, [loadNotifications]);
 
   useEffect(() => {
+    let mounted = true;
+    const socket = openRealtimeSocket('/ws/notifications/', {
+      onMessage: () => {
+        if (mounted) loadNotifications();
+      },
+      onClose: () => {
+        if (mounted) {
+          // Polling fallback keeps the list fresh if websocket connectivity drops.
+        }
+      },
+    });
+
+    socketRef.current = socket;
+    const refreshInterval = setInterval(loadNotifications, 30000);
+
+    return () => {
+      mounted = false;
+      if (socket) socket.close();
+      clearInterval(refreshInterval);
+    };
+  }, [loadNotifications]);
+
+  useEffect(() => {
     const unreadCount = notifications.filter(notification => !notification.read).length;
     setUnreadCount(unreadCount);
   }, [notifications, setUnreadCount]);
@@ -100,34 +125,6 @@ const Notifications = ({ setUnreadCount }) => {
     setNotifications(prev =>
       prev.filter(notification => notification.id !== notificationId)
     );
-  };
-
-  const getNotificationIcon = (type) => {
-    const icons = {
-      status_update: 'ðŸ”„',
-      new_comment: 'ðŸ’¬',
-      resolved: 'âœ…',
-      escalated: 'â¬†ï¸',
-      reminder: 'â°',
-      appointment: 'ðŸ“…',
-      complaint_update: 'ðŸ“¢',
-      default: 'ðŸ“¢'
-    };
-    return icons[type] || icons.default;
-  };
-
-  const getNotificationColor = (type) => {
-    const colors = {
-      status_update: 'text-blue-500',
-      new_comment: 'text-green-500',
-      resolved: 'text-green-600',
-      escalated: 'text-orange-500',
-      reminder: 'text-purple-500',
-      appointment: 'text-blue-600',
-      complaint_update: 'text-blue-500',
-      default: 'text-gray-500'
-    };
-    return colors[type] || colors.default;
   };
 
   const filteredNotifications = notifications.filter(notification => {
@@ -177,13 +174,12 @@ const Notifications = ({ setUnreadCount }) => {
             <button
               key={filterType}
               onClick={() => setFilter(filterType)}
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                filter === filterType
-                  ? 'bg-blue-500 text-white'
-                  : isDark
-                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              className={`px-3 py-1 rounded text-sm transition-colors ${filter === filterType
+                ? 'bg-blue-500 text-white'
+                : isDark
+                  ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
             >
               {filterType.charAt(0).toUpperCase() + filterType.slice(1)}
               {filterType === 'unread' && (
@@ -199,7 +195,6 @@ const Notifications = ({ setUnreadCount }) => {
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow overflow-hidden`}>
         {filteredNotifications.length === 0 ? (
           <div className="p-8 text-center">
-            <div className="text-4xl mb-4">ðŸ””</div>
             <h3 className={`text-lg font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
               No notifications
             </h3>
@@ -216,17 +211,13 @@ const Notifications = ({ setUnreadCount }) => {
             {filteredNotifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`p-4 transition-colors ${
-                  !notification.read
-                    ? isDark ? 'bg-gray-750 hover:bg-gray-700' : 'bg-blue-50 hover:bg-blue-100'
-                    : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
-                }`}
+                className={`p-4 transition-colors ${!notification.read
+                  ? isDark ? 'bg-gray-750 hover:bg-gray-700' : 'bg-blue-50 hover:bg-blue-100'
+                  : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                  }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3 flex-1">
-                    <div className={`text-2xl ${getNotificationColor(notification.type)}`}>
-                      {getNotificationIcon(notification.type)}
-                    </div>
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-1">
                         <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -254,7 +245,7 @@ const Notifications = ({ setUnreadCount }) => {
                         className="p-1 text-blue-500 hover:text-blue-700 transition-colors"
                         title="Mark as read"
                       >
-                        âœ“
+                        Read
                       </button>
                     )}
                     <button
@@ -262,7 +253,7 @@ const Notifications = ({ setUnreadCount }) => {
                       className="p-1 text-red-500 hover:text-red-700 transition-colors"
                       title="Delete notification"
                     >
-                      âœ•
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -271,7 +262,7 @@ const Notifications = ({ setUnreadCount }) => {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 };
 

@@ -10,6 +10,8 @@ from rest_framework.response import Response as DRFResponse
 from accounts.models import User
 
 from .models import (
+    AnnouncementComment,
+    AnnouncementLike,
     Appointment,
     Assignment,
     Category,
@@ -24,6 +26,7 @@ from .models import (
     Response,
 )
 from .serializers import (
+    AnnouncementCommentSerializer,
     AppointmentSerializer,
     AssignmentSerializer,
     CategoryResolverSerializer,
@@ -36,9 +39,8 @@ from .serializers import (
     ResolverLevelSerializer,
     ResponseSerializer,
 )
+from .realtime import build_complaint_analytics, broadcast_notification_update
 from .service import service
-
-
 class IsAdminRole(permissions.BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_admin())
@@ -57,19 +59,40 @@ def accessible_complaints_for(user):
     if user.is_admin():
         return Complaint.objects.all()
     if user.is_officer():
+        resolver_category_ids = CategoryResolver.objects.filter(
+            officer=user,
+            active=True,
+        ).values_list('category_id', flat=True)
         return Complaint.objects.filter(
-            models.Q(assigned_officer=user) | models.Q(submitted_by=user)
+            models.Q(assigned_officer=user)
+            | models.Q(submitted_by=user)
+            | models.Q(category_id__in=resolver_category_ids)
         ).distinct()
     return Complaint.objects.filter(submitted_by=user)
 
 
 def can_manage_complaint(user, complaint):
+    is_category_resolver = False
+    if (
+        user
+        and user.is_authenticated
+        and user.is_officer()
+        and complaint
+        and complaint.category_id
+    ):
+        is_category_resolver = CategoryResolver.objects.filter(
+            officer=user,
+            category_id=complaint.category_id,
+            active=True,
+        ).exists()
+
     return bool(
         user
         and user.is_authenticated
         and (
             user.is_admin()
             or (user.is_officer() and complaint.assigned_officer_id == user.id)
+            or is_category_resolver
         )
     )
 
@@ -134,19 +157,21 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         data = request.data.copy()
         data.pop('user', None)
 
-        raw_cc = data.get('cc_emails', '[]')
-        try:
-            cc_emails = json.loads(raw_cc) if isinstance(raw_cc, str) else raw_cc
-        except (ValueError, TypeError):
-            cc_emails = []
-        data.setlist('cc_emails', cc_emails)
+        def _normalize_list_field(payload, key):
+            raw_value = payload.get(key, '[]')
+            try:
+                parsed_value = json.loads(raw_value) if isinstance(raw_value, str) else raw_value
+            except (ValueError, TypeError):
+                parsed_value = []
 
-        raw_cc_officers = data.get('cc_officer_ids', '[]')
-        try:
-            cc_officer_ids = json.loads(raw_cc_officers) if isinstance(raw_cc_officers, str) else raw_cc_officers
-        except (ValueError, TypeError):
-            cc_officer_ids = []
-        data.setlist('cc_officer_ids', cc_officer_ids)
+            if hasattr(payload, 'setlist'):
+                payload.setlist(key, parsed_value)
+            else:
+                payload[key] = parsed_value
+
+        _normalize_list_field(data, 'cc_emails')
+        _normalize_list_field(data, 'cc_officer_ids')
+        _normalize_list_field(data, 'cc_office_ids')
 
         serializer = self.get_serializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -161,9 +186,16 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         output_serializer = ComplaintSerializer(complaint, context={'request': request})
         return DRFResponse(output_serializer.data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['get'], url_path='analytics')
+    def analytics(self, request):
+        if not (request.user.is_admin() or request.user.is_officer()):
+            return DRFResponse({'error': 'Only officers and admins can view complaint analytics.'}, status=status.HTTP_403_FORBIDDEN)
+
+        return DRFResponse(build_complaint_analytics(request.user), status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'], url_path='assign')
     def assign(self, request, pk=None):
-        complaint = self.get_object()
+        complaint = get_object_or_404(Complaint, pk=pk)
         if not can_manage_complaint(request.user, complaint):
             return DRFResponse({'error': 'You do not have permission to assign this complaint.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -188,9 +220,36 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
         return DRFResponse({'detail': 'Complaint assigned successfully'}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['get'], url_path='eligible-officers')
+    def eligible_officers(self, request, pk=None):
+        complaint = get_object_or_404(Complaint, pk=pk)
+        if not can_manage_complaint(request.user, complaint):
+            return DRFResponse({'error': 'You do not have permission to manage this complaint.'}, status=status.HTTP_403_FORBIDDEN)
+
+        officers_qs = User.objects.filter(role='officer', is_active=True).select_related('officer_profile')
+
+        if complaint.category_id:
+            officers = [officer for officer in officers_qs if complaint.category.matches_officer(officer)]
+        else:
+            officers = list(officers_qs)
+
+        data = [
+            {
+                'id': officer.id,
+                'email': officer.email,
+                'first_name': officer.first_name,
+                'last_name': officer.last_name,
+                'full_name': officer.full_name,
+                'is_current_assignee': complaint.assigned_officer_id == officer.id,
+            }
+            for officer in officers
+        ]
+
+        return DRFResponse(data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'], url_path='reassign')
     def reassign(self, request, pk=None):
-        complaint = self.get_object()
+        complaint = get_object_or_404(Complaint, pk=pk)
         if not can_manage_complaint(request.user, complaint):
             return DRFResponse({'error': 'You do not have permission to reassign this complaint.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -222,7 +281,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='change-status')
     def change_status(self, request, pk=None):
-        complaint = self.get_object()
+        complaint = get_object_or_404(Complaint, pk=pk)
         if not can_manage_complaint(request.user, complaint):
             return DRFResponse({'error': 'You do not have permission to update this complaint.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -232,11 +291,34 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
         complaint.status = new_status
         complaint.save()
+
+        from .models import Notification
+
+        if complaint.submitted_by_id:
+            Notification.objects.create(
+                user=complaint.submitted_by,
+                complaint=complaint,
+                notification_type='complaint_update',
+                title='Complaint status updated',
+                message=f"Your complaint '{complaint.title}' status changed to {complaint.get_status_display()}.",
+            )
+            broadcast_notification_update(complaint.submitted_by_id)
+
+        if complaint.assigned_officer_id and complaint.assigned_officer_id != complaint.submitted_by_id:
+            Notification.objects.create(
+                user=complaint.assigned_officer,
+                complaint=complaint,
+                notification_type='complaint_update',
+                title='Complaint status updated',
+                message=f"Complaint '{complaint.title}' changed to {complaint.get_status_display()}.",
+            )
+            broadcast_notification_update(complaint.assigned_officer_id)
+
         return DRFResponse({'detail': f'Status updated to {new_status}'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='escalate')
     def escalate(self, request, pk=None):
-        complaint = self.get_object()
+        complaint = get_object_or_404(Complaint, pk=pk)
         if not can_manage_complaint(request.user, complaint):
             return DRFResponse({'error': 'You do not have permission to escalate this complaint.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -463,6 +545,8 @@ class PublicAnnouncementViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             return [permissions.AllowAny()]
+        if self.action == 'comments' and self.request.method == 'GET':
+            return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
@@ -498,6 +582,46 @@ class PublicAnnouncementViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='toggle-like')
+    def toggle_like(self, request, pk=None):
+        announcement = self.get_object()
+        existing = AnnouncementLike.objects.filter(announcement=announcement, user=request.user).first()
+        if existing:
+            existing.delete()
+            liked = False
+        else:
+            AnnouncementLike.objects.create(announcement=announcement, user=request.user)
+            liked = True
+
+        return DRFResponse(
+            {
+                'liked': liked,
+                'likes_count': announcement.likes.count(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['get', 'post'], url_path='comments')
+    def comments(self, request, pk=None):
+        announcement = self.get_object()
+
+        if request.method == 'GET':
+            queryset = announcement.comments.select_related('user').order_by('-created_at')
+            serializer = AnnouncementCommentSerializer(queryset, many=True)
+            return DRFResponse(serializer.data, status=status.HTTP_200_OK)
+
+        message = (request.data.get('message') or '').strip()
+        if not message:
+            return DRFResponse({'error': 'message is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        comment = AnnouncementComment.objects.create(
+            announcement=announcement,
+            user=request.user,
+            message=message,
+        )
+        serializer = AnnouncementCommentSerializer(comment)
+        return DRFResponse(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='hide')
     def hide(self, request, pk=None):
