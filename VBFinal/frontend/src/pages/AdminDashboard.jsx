@@ -121,82 +121,6 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
           accent="blue"
         />
 
-        {/* System Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-lg">📝</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Complaints</p>
-                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.totalComplaints}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-lg">⏳</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Pending</p>
-                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.pendingComplaints}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-lg">✅</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Resolved</p>
-                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.resolvedComplaints}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* System Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-lg">👥</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Users</p>
-                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.totalUsers}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
-                  <span className="text-white text-lg">🏛️</span>
-                </div>
-              </div>
-              <div className="ml-4">
-                <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Institutions</p>
-                <p className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{systemStats.totalInstitutions}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Performance Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
@@ -225,7 +149,7 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
             </div>
           </div>
         </div>
-      </div>
+      </div >
     );
   };
 

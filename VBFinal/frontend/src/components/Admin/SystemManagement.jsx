@@ -44,11 +44,17 @@ const SystemManagement = () => {
   });
   const [backupStatus, setBackupStatus] = useState('Last backup: Never');
   const [loading, setLoading] = useState(false);
-  const [, setBackupHistory] = useState([]);
   const [restoreFile, setRestoreFile] = useState(null);
   const [backupProgress, setBackupProgress] = useState(0);
   const [restoreProgress, setRestoreProgress] = useState(0);
   const [systemLogs, setSystemLogs] = useState([]);
+  const [logStats, setLogStats] = useState({
+    total: 0,
+    info: 0,
+    warn: 0,
+    error: 0,
+    success: 0,
+  });
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState(null);
   const [logLevelFilter, setLogLevelFilter] = useState('');
@@ -93,34 +99,28 @@ const SystemManagement = () => {
     { id: 'security', name: 'Security & Configuration', icon: '🔒' }
   ];
 
-  useEffect(() => {
-    loadSystemStats();
+  const loadSystemStats = useCallback(async () => {
+    try {
+      const [complaintsData, usersData] = await Promise.all([
+        apiService.getComplaints(),
+        apiService.getAllUsers()
+      ]);
 
-    // Load real-time stats immediately and then every 9 seconds
-    updateRealTimeStats();
-    const interval = setInterval(updateRealTimeStats, 9000);
+      const complaints = complaintsData.results || complaintsData;
+      const users = usersData.results || usersData;
 
-    // Load system alerts less frequently
-    loadSystemAlerts();
-    const alertsInterval = setInterval(loadSystemAlerts, 90000);
-
-    // Load JWT configuration
-    loadJwtConfig();
-
-    return () => {
-      clearInterval(interval);
-      clearInterval(alertsInterval);
-    };
+      setSystemStats((prev) => ({
+        ...prev,
+        totalComplaints: complaints.length,
+        activeUsers: users.length
+      }));
+    } catch (error) {
+      console.error('Failed to load system stats:', error);
+    }
   }, []);
 
-  useEffect(() => {
-    setMaintenanceMessage(currentMaintenanceMessage || 'System is under maintenance. Please try again later.');
-  }, [currentMaintenanceMessage]);
-
-  // Real-time system stats from backend
-  const updateRealTimeStats = async () => {
+  const updateRealTimeStats = useCallback(async () => {
     try {
-      // Try to get real system stats from backend
       const response = await apiService.request('/system/stats/');
 
       if (response && response.system) {
@@ -131,14 +131,13 @@ const SystemManagement = () => {
           disk: Math.max(0, Math.min(100, systemData.disk || 0)),
           network: (systemData.network_recv || 0) + (systemData.network_sent || 0),
           activeSessions: systemData.process_count || 0,
-          responseTime: (Math.random() * 0.5) + 0.2  // 0.2 - 0.7 seconds
+          responseTime: (Math.random() * 0.5) + 0.2
         };
 
         setRealTimeStats(newStats);
         setStatsAvailable(true);
         setStatsError(null);
 
-        // Update system stats with real backend data
         setSystemStats(prev => ({
           ...prev,
           uptime: systemData.uptime_hours ? `${Math.floor(systemData.uptime_hours / 24)} days, ${Math.floor(systemData.uptime_hours % 24)} hours` : prev.uptime,
@@ -149,21 +148,16 @@ const SystemManagement = () => {
           activeUsers: response.django?.active_users || prev.activeUsers
         }));
 
-        // Update history for charts (keep last 20 data points)
         const now = new Date();
         const timeString = now.toLocaleTimeString();
 
-        setStatsHistory(prev => {
-          const newHistory = {
-            cpu: [...prev.cpu.slice(-19), newStats.cpu],
-            memory: [...prev.memory.slice(-19), newStats.memory],
-            disk: [...prev.disk.slice(-19), newStats.disk],
-            timestamps: [...prev.timestamps.slice(-19), timeString]
-          };
-          return newHistory;
-        });
+        setStatsHistory(prev => ({
+          cpu: [...prev.cpu.slice(-19), newStats.cpu],
+          memory: [...prev.memory.slice(-19), newStats.memory],
+          disk: [...prev.disk.slice(-19), newStats.disk],
+          timestamps: [...prev.timestamps.slice(-19), timeString]
+        }));
       } else {
-        // No real data available
         setStatsAvailable(false);
         setStatsError('System metrics unavailable. Unable to fetch real-time data from server.');
         setRealTimeStats({
@@ -176,7 +170,6 @@ const SystemManagement = () => {
         });
       }
     } catch (error) {
-      // Error fetching data
       setStatsAvailable(false);
       setStatsError(`Failed to load system metrics: ${error.message}`);
       setRealTimeStats({
@@ -188,9 +181,9 @@ const SystemManagement = () => {
         responseTime: 0
       });
     }
-  };
+  }, []);
 
-  const loadSystemAlerts = async () => {
+  const loadSystemAlerts = useCallback(async () => {
     try {
       const response = await apiService.request('/system/alerts/');
       if (response && response.alerts) {
@@ -199,9 +192,9 @@ const SystemManagement = () => {
     } catch (error) {
       console.error('Failed to load system alerts:', error);
     }
-  };
+  }, []);
 
-  const loadJwtConfig = async () => {
+  const loadJwtConfig = useCallback(async () => {
     try {
       const response = await apiService.getJwtConfig();
       if (response) {
@@ -211,8 +204,30 @@ const SystemManagement = () => {
     } catch (error) {
       console.error('Failed to load JWT config:', error);
     }
-  };
+  }, []);
 
+  useEffect(() => {
+    loadSystemStats();
+
+    updateRealTimeStats();
+    const interval = setInterval(updateRealTimeStats, 9000);
+
+    loadSystemAlerts();
+    const alertsInterval = setInterval(loadSystemAlerts, 90000);
+
+    loadJwtConfig();
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(alertsInterval);
+    };
+  }, [loadJwtConfig, loadSystemAlerts, loadSystemStats, updateRealTimeStats]);
+
+  useEffect(() => {
+    setMaintenanceMessage(currentMaintenanceMessage || 'System is under maintenance. Please try again later.');
+  }, [currentMaintenanceMessage]);
+
+  // Real-time system stats from backend
   const updateJwtTimeout = async (timeoutMinutes) => {
     try {
       const response = await apiService.updateJwtTimeout(timeoutMinutes);
@@ -223,26 +238,6 @@ const SystemManagement = () => {
     } catch (error) {
       console.error('Failed to update JWT timeout:', error);
       alert('Failed to update session timeout');
-    }
-  };
-
-  const loadSystemStats = async () => {
-    try {
-      const [complaintsData, usersData] = await Promise.all([
-        apiService.getComplaints(),
-        apiService.getUsers?.() || Promise.resolve([])
-      ]);
-
-      const complaints = complaintsData.results || complaintsData;
-      const users = usersData.results || usersData;
-
-      setSystemStats(prev => ({
-        ...prev,
-        totalComplaints: complaints.length,
-        activeUsers: users.length
-      }));
-    } catch (error) {
-      console.error('Failed to load system stats:', error);
     }
   };
 
@@ -262,12 +257,26 @@ const SystemManagement = () => {
         setLogCount(data.count ?? data.results.length);
         setHasNextLogPage(Boolean(data.next));
         setHasPreviousLogPage(Boolean(data.previous));
+        setLogStats({
+          total: data.stats?.total ?? data.count ?? data.results.length,
+          info: data.stats?.info ?? 0,
+          warn: data.stats?.warn ?? 0,
+          error: data.stats?.error ?? 0,
+          success: data.stats?.success ?? 0,
+        });
       } else {
         const normalized = Array.isArray(data) ? data : [];
         setSystemLogs(normalized);
         setLogCount(normalized.length);
         setHasNextLogPage(false);
         setHasPreviousLogPage(false);
+        setLogStats({
+          total: normalized.length,
+          info: normalized.filter((log) => log.level === 'INFO').length,
+          warn: normalized.filter((log) => log.level === 'WARN').length,
+          error: normalized.filter((log) => log.level === 'ERROR').length,
+          success: normalized.filter((log) => log.level === 'SUCCESS').length,
+        });
       }
     } catch (error) {
       console.error('Failed to load system logs:', error);
@@ -275,6 +284,13 @@ const SystemManagement = () => {
       setLogCount(0);
       setHasNextLogPage(false);
       setHasPreviousLogPage(false);
+      setLogStats({
+        total: 0,
+        info: 0,
+        warn: 0,
+        error: 0,
+        success: 0,
+      });
       setLogsError(error.message || 'Failed to load system logs');
     } finally {
       setLogsLoading(false);
@@ -285,7 +301,7 @@ const SystemManagement = () => {
     loadSystemLogs();
   }, [loadSystemLogs]);
 
-  const loadActiveSessions = async () => {
+  const loadActiveSessions = useCallback(async () => {
     setSessionsLoading(true);
     setSessionsError(null);
     try {
@@ -307,25 +323,23 @@ const SystemManagement = () => {
     } finally {
       setSessionsLoading(false);
     }
-  };
+  }, []);
 
-  const handleOpenActiveSessions = () => {
+  const handleOpenActiveSessions = useCallback(() => {
     setShowActiveSessionsModal(true);
     loadActiveSessions();
-  };
+  }, [loadActiveSessions]);
 
   // Auto-refresh sessions when modal is open
   useEffect(() => {
     if (!showActiveSessionsModal) return;
 
-    // Load immediately when modal opens (already done in handleOpenActiveSessions)
-    // Then set up auto-refresh every 100 seconds
     const refreshInterval = setInterval(() => {
       loadActiveSessions();
     }, 100000);
 
     return () => clearInterval(refreshInterval);
-  }, [showActiveSessionsModal]);
+  }, [loadActiveSessions, showActiveSessionsModal]);
 
   const handleBackup = async (backupType = 'full') => {
     setLoading(true);
@@ -386,20 +400,9 @@ const SystemManagement = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // Update backup history
-      const newBackup = {
-        id: Date.now(),
-        type: backupType,
-        timestamp: new Date().toISOString(),
-        size: `${(blob.size / 1024).toFixed(1)} KB`,
-        records: backupData.metadata.totalRecords,
-        status: 'completed'
-      };
-
-      setBackupHistory(prev => [newBackup, ...prev.slice(0, 9)]);
       setBackupStatus(`Last backup: ${new Date().toLocaleString()}`);
 
-      systemLogger.success(`${backupType.charAt(0).toUpperCase() + backupType.slice(1)} backup completed successfully (${newBackup.size}, ${newBackup.records} records)`, 'BACKUP');
+      systemLogger.success(`${backupType.charAt(0).toUpperCase() + backupType.slice(1)} backup completed successfully (${(blob.size / 1024).toFixed(1)} KB, ${backupData.metadata.totalRecords} records)`, 'BACKUP');
       alert(`${backupType.charAt(0).toUpperCase() + backupType.slice(1)} backup completed successfully!`);
     } catch (error) {
       systemLogger.error(`Backup failed: ${error.message}`, 'BACKUP');
@@ -614,34 +617,6 @@ const SystemManagement = () => {
       setScheduledMaintenanceTime('');
     } catch (error) {
       alert(`Failed to schedule maintenance: ${error.message}`);
-    }
-  };
-
-  const handleClearCache = async () => {
-    if (!confirm('Are you sure you want to clear system cache?')) return;
-
-    setLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      alert('System cache cleared successfully!');
-    } catch (error) {
-      alert('Failed to clear cache: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRestartServices = async () => {
-    if (!confirm('Are you sure you want to restart system services? This may cause temporary downtime.')) return;
-
-    setLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      alert('System services restarted successfully!');
-    } catch (error) {
-      alert('Failed to restart services: ' + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -877,33 +852,12 @@ const SystemManagement = () => {
         </div>
       </div>
 
-      {/* System Actions */}
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
           System Actions
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button
-            onClick={handleClearCache}
-            disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-orange-300 rounded-lg hover:border-orange-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-orange-50'
-              }`}
-          >
-            <div className="text-3xl mb-2">🧹</div>
-            <div className="font-medium text-orange-600">Clear Cache</div>
-            <div className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Free up system memory</div>
-          </button>
-
-          <button
-            onClick={handleRestartServices}
-            disabled={loading}
-            className={`flex flex-col items-center p-4 border-2 border-dashed border-red-300 rounded-lg hover:border-red-500 transition-colors disabled:opacity-50 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-red-50'
-              }`}
-          >
-            <div className="text-3xl mb-2">🔄</div>
-            <div className="font-medium text-red-600">Restart Services</div>
-            <div className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Restart all system services</div>
-          </button>
+        <div className={`p-4 rounded-lg text-sm ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+          Service-level actions are now managed from the backend. This panel focuses on maintenance, logs, sessions, and configuration.
         </div>
       </div>
     </div>
@@ -1102,19 +1056,19 @@ const SystemManagement = () => {
         {/* Log Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-lg font-bold text-blue-500">{logCount}</div>
+            <div className="text-lg font-bold text-blue-500">{logStats.total}</div>
             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Logs</div>
           </div>
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-lg font-bold text-red-500">{systemLogs.filter(log => log.level === 'ERROR').length}</div>
+            <div className="text-lg font-bold text-red-500">{logStats.error}</div>
             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Errors</div>
           </div>
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-lg font-bold text-yellow-500">{systemLogs.filter(log => log.level === 'WARN').length}</div>
+            <div className="text-lg font-bold text-yellow-500">{logStats.warn}</div>
             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Warnings</div>
           </div>
           <div className={`p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-lg font-bold text-green-500">{systemLogs.filter(log => log.level === 'SUCCESS').length}</div>
+            <div className="text-lg font-bold text-green-500">{logStats.success}</div>
             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Success</div>
           </div>
         </div>
@@ -1776,7 +1730,7 @@ const SystemManagement = () => {
                   </table>
                   <div className={`mt-4 p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
                     <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      📊 Total Active Sessions: <strong>{activeSessions.length}</strong>
+                      Total Active Sessions: <strong>{activeSessions.length}</strong>
                     </p>
                     <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                       Data is based on user activity in the last 24 hours. Sessions automatically appear when users log in or make API requests. Auto-refreshing every 100 seconds.

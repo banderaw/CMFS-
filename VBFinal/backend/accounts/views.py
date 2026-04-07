@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Count, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -431,12 +431,49 @@ class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
         qs = SystemLog.objects.all()
         level = self.request.query_params.get('level')
         category = self.request.query_params.get('category')
-        limit = self.request.query_params.get('limit', 100)
         if level:
             qs = qs.filter(level=level.upper())
         if category:
             qs = qs.filter(category=category.upper())
-        return qs[:int(limit)]
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        total_count = queryset.count()
+
+        try:
+            limit = max(1, int(request.query_params.get('limit', 100)))
+        except (TypeError, ValueError):
+            limit = 100
+
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (TypeError, ValueError):
+            page = 1
+
+        offset = (page - 1) * limit
+        results = queryset[offset:offset + limit]
+
+        stats = queryset.aggregate(
+            total=Count('id'),
+            info=Count('id', filter=Q(level='INFO')),
+            warn=Count('id', filter=Q(level='WARN')),
+            error=Count('id', filter=Q(level='ERROR')),
+            success=Count('id', filter=Q(level='SUCCESS')),
+        )
+
+        next_exists = offset + limit < total_count
+        previous_exists = page > 1 and total_count > 0
+
+        return Response({
+            'count': total_count,
+            'next': next_exists,
+            'previous': previous_exists,
+            'page': page,
+            'page_size': limit,
+            'stats': stats,
+            'results': self.get_serializer(results, many=True).data,
+        })
 
     @action(detail=False, methods=['delete'], url_path='clear')
     def clear(self, request):

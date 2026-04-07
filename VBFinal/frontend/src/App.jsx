@@ -17,6 +17,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AdminComplaintDetail = lazy(() => import('./pages/AdminComplaintDetail'));
 const AdminUserDetail = lazy(() => import('./pages/AdminUserDetail'));
 const AdminUserOptions = lazy(() => import('./pages/AdminUserOptions'));
+const AdminCreateUser = lazy(() => import('./pages/AdminCreateUser'));
 const OfficerDashboard = lazy(() => import('./pages/OfficerDashboard'));
 const UserDashboard = lazy(() => import('./pages/UserDashboard'));
 const OfficerComplaintDetail = lazy(() => import('./pages/OfficerComplaintDetail'));
@@ -104,6 +105,14 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminUserOptions />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/create"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminCreateUser />
             </ProtectedRoute>
           }
         />
