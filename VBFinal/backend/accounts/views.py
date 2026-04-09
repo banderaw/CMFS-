@@ -480,6 +480,12 @@ class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
         SystemLog.objects.all().delete()
         return Response({'message': 'Logs cleared.'})
 
+    @action(detail=True, methods=['delete'], url_path='delete')
+    def delete_log(self, request, pk=None):
+        log = self.get_object()
+        log.delete()
+        return Response({'message': 'Log deleted.'}, status=status.HTTP_204_NO_CONTENT)
+
 
 class ProgramViewSet(PublicReadAdminWriteMixin, viewsets.ModelViewSet):
     queryset = Program.objects.order_by('id')

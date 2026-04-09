@@ -72,9 +72,12 @@ INSTALLED_APPS = [
     'drf_yasg',
     'corsheaders',
     'social_django',
+    "helpdesk",
 ]
 
 if CHANNELS_AVAILABLE:
+    staticfiles_index = INSTALLED_APPS.index('django.contrib.staticfiles')
+    INSTALLED_APPS.insert(staticfiles_index, 'daphne')
     INSTALLED_APPS.append('channels')
 
 MIDDLEWARE = [
@@ -130,15 +133,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'conf.wsgi.application'
 ASGI_APPLICATION = 'conf.asgi.application'
 
-# DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv('DATABASE_URL')
 # if DATABASE_URL:
-#     DATABASES = {
-#         'default': dj_database_url.parse(
-#             DATABASE_URL,
-#             conn_max_age=600,
-#             ssl_require=not DEBUG,
-#         )
-#     }
+    # DATABASES = {
+    #     'default': dj_database_url.parse(
+    #         DATABASE_URL,
+    #         conn_max_age=600,
+    #         ssl_require=not DEBUG,
+    #     )
+    # }
 # elif DEBUG:
 #     DATABASES = {
 #         'default': {
@@ -149,19 +152,24 @@ ASGI_APPLICATION = 'conf.asgi.application'
 # else:
 #     raise ValueError('DATABASE_URL environment variable is required when DEBUG is false.')
 
-
-
-
 DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('DB_ENGINE'),
-        'NAME': os.getenv('DB_NAME'),
-        'USER': os.getenv('DB_USER'),
-        'PASSWORD': os.getenv('DB_PASSWORD'),
-        'HOST': os.getenv('DB_HOST'),
-        'PORT': os.getenv('DB_PORT'),
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': os.getenv('DB_ENGINE'),
+#         'NAME': os.getenv('DB_NAME'),
+#         'USER': os.getenv('DB_USER'),
+#         'PASSWORD': os.getenv('DB_PASSWORD'),
+#         'HOST': os.getenv('DB_HOST'),
+#         'PORT': os.getenv('DB_PORT'),
+#     }
+# }
 
 CACHES = {
     'default': {
@@ -171,11 +179,31 @@ CACHES = {
 }
 
 if CHANNELS_AVAILABLE:
-    CHANNEL_LAYERS = {
-        'default': {
-            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    redis_url = os.getenv('REDIS_URL', '').strip()
+    try:
+        import channels_redis  # noqa: F401
+
+        if redis_url:
+            CHANNEL_LAYERS = {
+                'default': {
+                    'BACKEND': 'channels_redis.core.RedisChannelLayer',
+                    'CONFIG': {
+                        'hosts': [redis_url],
+                    },
+                }
+            }
+        else:
+            CHANNEL_LAYERS = {
+                'default': {
+                    'BACKEND': 'channels.layers.InMemoryChannelLayer',
+                }
+            }
+    except ImportError:
+        CHANNEL_LAYERS = {
+            'default': {
+                'BACKEND': 'channels.layers.InMemoryChannelLayer',
+            }
         }
-    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -221,7 +249,7 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
 if DEBUG and not EMAIL_HOST_USER:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-JWT_SESSION_TIMEOUT_MINUTES = 60
+JWT_SESSION_TIMEOUT_MINUTES = 600
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=JWT_SESSION_TIMEOUT_MINUTES),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -256,7 +284,8 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.user.user_details',
     'accounts.pipeline.generate_jwt_token',
 )
-SOCIAL_AUTH_URL_NAMESPACE = os.getenv('SOCIAL_AUTH_URL_NAMESPACE')
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = os.getenv('SOCIAL_AUTH_LOGIN_REDIRECT_URL')
-SOCIAL_AUTH_NEW_USER_REDIRECT_URL = os.getenv('SOCIAL_AUTH_NEW_USER_REDIRECT_URL')
-SOCIAL_AUTH_LOGIN_ERROR_URL = os.getenv('SOCIAL_AUTH_LOGIN_ERROR_URL')
+frontend_base_url = FRONTEND_URL.rstrip('/')
+SOCIAL_AUTH_URL_NAMESPACE = os.getenv('SOCIAL_AUTH_URL_NAMESPACE', 'social')
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = os.getenv('SOCIAL_AUTH_LOGIN_REDIRECT_URL', f'{frontend_base_url}/auth/success')
+SOCIAL_AUTH_NEW_USER_REDIRECT_URL = os.getenv('SOCIAL_AUTH_NEW_USER_REDIRECT_URL', f'{frontend_base_url}/register/complete')
+SOCIAL_AUTH_LOGIN_ERROR_URL = os.getenv('SOCIAL_AUTH_LOGIN_ERROR_URL', f'{frontend_base_url}/auth/error')

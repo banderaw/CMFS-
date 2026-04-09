@@ -197,11 +197,11 @@ class Program(models.Model):
     def __str__(self):
         return self.program_name or ''
 class User(AbstractBaseUser, PermissionsMixin):
-    ROLE_USER = 'user'  # Complainter
+    ROLE_USER = 'user'  # Student
     ROLE_OFFICER = 'officer'  # Resolver
     ROLE_ADMIN = 'admin'  # System Admin
     ROLE_CHOICES = [
-        (ROLE_USER, 'User (Complainter)'),
+        (ROLE_USER, 'User (Student)'),
         (ROLE_OFFICER, 'Officer (Resolver)'),
         (ROLE_ADMIN, 'Admin (System Admin)'),
     ]

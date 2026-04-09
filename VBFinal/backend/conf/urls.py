@@ -36,6 +36,7 @@ router.registry.extend(contact_router.registry)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/helpdesk/', include('helpdesk.urls')),
     path('api-auth/', include('rest_framework.urls')),
     path('auth/', include('social_django.urls', namespace='social')),
 ]

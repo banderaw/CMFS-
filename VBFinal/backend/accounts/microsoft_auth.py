@@ -184,8 +184,6 @@ def microsoft_callback(request):
                 )
                 is_new = True
             except (ValidationError, IntegrityError):
-                # If another process created/normalized this email concurrently,
-                # treat it as a login flow instead of failing social auth.
                 user = User.objects.filter(email__iexact=email).first()
                 if not user:
                     raise

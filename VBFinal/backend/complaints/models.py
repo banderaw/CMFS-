@@ -133,7 +133,7 @@ class ResolverLevel(models.Model):
     def __str__(self):
         return f"{self.name} (L{self.level_order})"
 
-
+# escalation time is moved to category level 
 
 
 class CategoryResolver(models.Model):
@@ -152,6 +152,7 @@ class CategoryResolver(models.Model):
         on_delete=models.CASCADE,
         related_name="assigned_categories"
     )
+   
 
     active = models.BooleanField(default=True)
 
@@ -244,7 +245,7 @@ class Complaint(models.Model):
         blank=True,
         related_name="active_complaints"
     )
-
+# escalation deadline will be removed 
     escalation_deadline = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

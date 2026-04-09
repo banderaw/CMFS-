@@ -17,12 +17,14 @@ var/
 wheels/
 *.egg-info/
 .installed.cfg
-
-
+helpdesk/__pycache__/
+helpdesk/migrations/__pycache__/
+attachments/
 complaint_attachments/
 # Environment variables
 .env
 .env.local
+.env.example
 .env.*.local
 *.egg
 docs/
@@ -31,7 +33,7 @@ docs/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-
+helpdesk/migrations/
 # Django migrations
 **/migrations/*
 !**/migrations/__init__.py
