@@ -10,6 +10,33 @@ from accounts.models import User, EmailLog
 
 class EscalationService:
     """Service for handling automatic escalation of complaints"""
+
+    @staticmethod
+    def _get_due_complaints(now=None):
+        """
+        Recalculate and persist escalation deadlines based on complaint creation time
+        and current assignment escalation_time, then return due complaints.
+        """
+        now = now or timezone.now()
+        active_complaints = Complaint.objects.filter(
+            Q(status='in_progress') | Q(status='pending'),
+            current_level__isnull=False,
+            assigned_officer__isnull=False,
+        )
+
+        due_complaints = []
+        for complaint in active_complaints:
+            previous_deadline = complaint.escalation_deadline
+            complaint.set_escalation_deadline()
+            recalculated_deadline = complaint.escalation_deadline
+
+            if previous_deadline != recalculated_deadline:
+                Complaint.objects.filter(pk=complaint.pk).update(escalation_deadline=recalculated_deadline)
+
+            if recalculated_deadline and recalculated_deadline <= now:
+                due_complaints.append(complaint)
+
+        return due_complaints
     
     @staticmethod
     def check_and_escalate_complaints():
@@ -18,14 +45,10 @@ class EscalationService:
         If deadline passed, automatically escalate to next level
         """
         now = timezone.now()
-        escalatable_complaints = Complaint.objects.filter(
-            Q(status='in_progress') | Q(status='pending'),
-            escalation_deadline__isnull=False,
-            escalation_deadline__lte=now
-        )
+        escalatable_complaints = EscalationService._get_due_complaints(now)
         
         escalation_results = {
-            'total_checked': escalatable_complaints.count(),
+            'total_checked': len(escalatable_complaints),
             'escalated': 0,
             'failed': 0,
             'errors': []
@@ -144,15 +167,11 @@ This complaint has reached the maximum escalation level and requires administrat
     def get_escalation_statistics():
         """Get statistics about escalations"""
         escalated_complaints = Complaint.objects.filter(status='escalated')
-        pending_escalation = Complaint.objects.filter(
-            Q(status='in_progress') | Q(status='pending'),
-            escalation_deadline__isnull=False,
-            escalation_deadline__lte=timezone.now()
-        )
+        pending_escalation = EscalationService._get_due_complaints(timezone.now())
         
         return {
             'total_escalated': escalated_complaints.count(),
-            'pending_escalation': pending_escalation.count(),
+            'pending_escalation': len(pending_escalation),
         }
     
     @staticmethod

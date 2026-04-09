@@ -21,7 +21,6 @@ class ComplaintSecurityAPITests(APITestCase):
         self.resolver_level = ResolverLevel.objects.create(
             name='Department',
             level_order=1,
-            escalation_time=timedelta(hours=1),
         )
 
         self.category = Category.objects.create(
@@ -33,6 +32,7 @@ class ComplaintSecurityAPITests(APITestCase):
             category=self.category,
             level=self.resolver_level,
             officer=self.officer_one,
+            escalation_time=timedelta(hours=1),
         )
 
         self.assigned_complaint = Complaint.objects.create(

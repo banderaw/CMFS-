@@ -191,7 +191,30 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         if not (request.user.is_admin() or request.user.is_officer()):
             return DRFResponse({'error': 'Only officers and admins can view complaint analytics.'}, status=status.HTTP_403_FORBIDDEN)
 
-        return DRFResponse(build_complaint_analytics(request.user), status=status.HTTP_200_OK)
+        scope = (request.query_params.get('scope') or '').strip().lower()
+
+        # Officers can only access their own assigned-complaint analytics.
+        if request.user.is_officer() and not request.user.is_admin():
+            return DRFResponse(build_complaint_analytics(request.user), status=status.HTTP_200_OK)
+
+        if scope in ('', 'auto', 'admin'):
+            return DRFResponse(build_complaint_analytics(request.user), status=status.HTTP_200_OK)
+
+        if scope == 'officer':
+            officer_id = request.query_params.get('officer_id')
+            if not officer_id:
+                return DRFResponse(
+                    {'error': 'officer_id is required when scope=officer.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            officer_user = get_object_or_404(User, id=officer_id, role='officer')
+            return DRFResponse(build_complaint_analytics(officer_user), status=status.HTTP_200_OK)
+
+        return DRFResponse(
+            {'error': "Invalid scope. Use 'admin' or 'officer'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     @action(detail=True, methods=['post'], url_path='assign')
     def assign(self, request, pk=None):
@@ -215,7 +238,16 @@ class ComplaintViewSet(viewsets.ModelViewSet):
         )
         complaint.assigned_officer = officer
         complaint.current_level = level
-        complaint.set_escalation_deadline()
+        assignment_config = CategoryResolver.objects.filter(
+            category=complaint.category,
+            level=level,
+            officer=officer,
+            active=True,
+        ).first()
+        complaint.set_escalation_deadline(
+            assignment_config.escalation_time if assignment_config else None,
+            base_time=complaint.created_at,
+        )
         complaint.save()
 
         return DRFResponse({'detail': 'Complaint assigned successfully'}, status=status.HTTP_200_OK)
@@ -347,7 +379,7 @@ class ComplaintViewSet(viewsets.ModelViewSet):
 
         complaint.current_level = next_level
         complaint.assigned_officer = category_resolver.officer
-        complaint.set_escalation_deadline()
+        complaint.set_escalation_deadline(category_resolver.escalation_time, base_time=complaint.created_at)
         complaint.status = 'escalated'
         complaint.save()
 

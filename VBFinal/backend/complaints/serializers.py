@@ -136,7 +136,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class ResolverLevelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResolverLevel
-        fields = ["id", "name", "level_order", "escalation_time"]
+        fields = ["id", "name", "level_order"]
         read_only_fields = ["id"]
 
 
@@ -147,7 +147,17 @@ class CategoryResolverSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CategoryResolver
-        fields = ["id", "category", "category_name", "level", "level_name", "officer", "officer_name", "active"]
+        fields = [
+            "id",
+            "category",
+            "category_name",
+            "level",
+            "level_name",
+            "officer",
+            "officer_name",
+            "escalation_time",
+            "active",
+        ]
         read_only_fields = ["id", "officer_name", "level_name", "category_name"]
 
 

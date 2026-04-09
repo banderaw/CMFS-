@@ -123,9 +123,6 @@ class Category(models.Model):
 class ResolverLevel(models.Model):
     name = models.CharField(max_length=100)  # e.g. Department, Dean, President
     level_order = models.PositiveIntegerField(unique=True)  # 1, 2, 3...
-    escalation_time = models.DurationField(
-        help_text="Time before escalation (e.g. 48 hours)"
-    )
 
     class Meta:
         ordering = ["level_order"]
@@ -151,6 +148,9 @@ class CategoryResolver(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="assigned_categories"
+    )
+    escalation_time = models.DurationField(
+        help_text="Time before escalation for this category-level-officer assignment (e.g. 48:00:00)."
     )
    
 
@@ -296,9 +296,37 @@ class Complaint(models.Model):
     def __str__(self):
         return f"{self.complaint_id}  {self.title}  ({self.status})"
 
-    def set_escalation_deadline(self):
-        if self.current_level:
-            self.escalation_deadline = timezone.now() + self.current_level.escalation_time
+    def _get_current_assignment(self):
+        if not (self.category_id and self.current_level_id and self.assigned_officer_id):
+            return None
+
+        return CategoryResolver.objects.filter(
+            category_id=self.category_id,
+            level_id=self.current_level_id,
+            officer_id=self.assigned_officer_id,
+            active=True,
+        ).first()
+
+    def calculate_escalation_deadline(self, escalation_time=None, base_time=None):
+        if not self.current_level:
+            return None
+
+        effective_escalation_time = escalation_time
+        if effective_escalation_time is None:
+            assignment = self._get_current_assignment()
+            effective_escalation_time = assignment.escalation_time if assignment else None
+
+        if not effective_escalation_time:
+            return None
+
+        deadline_base = base_time or self.created_at or timezone.now()
+        return deadline_base + effective_escalation_time
+
+    def set_escalation_deadline(self, escalation_time=None, base_time=None):
+        self.escalation_deadline = self.calculate_escalation_deadline(
+            escalation_time=escalation_time,
+            base_time=base_time,
+        )
 
     def save(self, *args, **kwargs):
         if self.current_level and not self.escalation_deadline:
@@ -339,7 +367,7 @@ class Complaint(models.Model):
             self.current_level = next_level
             self.assigned_officer = next_resolver.officer
             self.status = 'escalated'
-            self.set_escalation_deadline()
+            self.set_escalation_deadline(next_resolver.escalation_time, base_time=self.created_at)
             self.save()
             
             return True

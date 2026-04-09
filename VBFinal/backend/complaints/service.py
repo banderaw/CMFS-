@@ -31,7 +31,7 @@ class ComplaintService:
             if matched_resolver:
                 complaint.assigned_officer = matched_resolver.officer
                 complaint.current_level = first_level
-                complaint.set_escalation_deadline()
+                complaint.set_escalation_deadline(matched_resolver.escalation_time, base_time=complaint.created_at)
                 complaint.save()
 
                 Assignment.objects.create(

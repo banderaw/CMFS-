@@ -1,4 +1,5 @@
 import os
+import uuid
 from urllib.parse import urlparse
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status, viewsets
@@ -103,8 +104,9 @@ class HelpdeskSessionViewSet(viewsets.ModelViewSet):
 			)
 
 		room_name = f'helpdesk_{session.id}'
-		identity = str(request.user.id)
-		participant_name = request.user.full_name or request.user.email or f'user-{identity}'
+		identity_base = str(request.user.id)
+		identity = f'{identity_base}-{uuid.uuid4().hex[:8]}'
+		participant_name = request.user.full_name or request.user.email or f'user-{identity_base}'
 
 		token = (
 			api.AccessToken(livekit_api_key, livekit_api_secret)
@@ -127,6 +129,7 @@ class HelpdeskSessionViewSet(viewsets.ModelViewSet):
 				'token': token,
 				'room_name': room_name,
 				'session_id': str(session.id),
+				'participant_user_id': identity_base,
 			},
 			status=status.HTTP_200_OK,
 		)
