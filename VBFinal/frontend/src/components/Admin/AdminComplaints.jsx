@@ -9,11 +9,9 @@ const AdminComplaints = () => {
   const [complaints, setComplaints] = useState([]);
   const [filteredComplaints, setFilteredComplaints] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [institutions, setInstitutions] = useState([]);
   const [filters, setFilters] = useState({
     status: 'all',
-    category: 'all',
-    institution: 'all'
+    category: 'all'
   });
   const [loading, setLoading] = useState(true);
 
@@ -30,9 +28,6 @@ const AdminComplaints = () => {
     if (filters.category !== 'all') {
       filtered = filtered.filter(c => c.category?.category_id === filters.category);
     }
-    if (filters.institution !== 'all') {
-      filtered = filtered.filter(c => c.institution === parseInt(filters.institution));
-    }
 
     setFilteredComplaints(filtered);
   }, [complaints, filters]);
@@ -43,15 +38,13 @@ const AdminComplaints = () => {
 
   const loadData = async () => {
     try {
-      const [complaintsData, categoriesData, institutionsData] = await Promise.all([
+      const [complaintsData, categoriesData] = await Promise.all([
         apiService.getComplaints(),
-        apiService.getAllCategories(),
-        apiService.getInstitutions()
+        apiService.getAllCategories()
       ]);
 
       setComplaints(complaintsData.results || complaintsData);
       setCategories(categoriesData.results || categoriesData || []);
-      setInstitutions(institutionsData.results || institutionsData);
 
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -86,20 +79,6 @@ const AdminComplaints = () => {
   };
 
 
-
-  const getStats = () => {
-    const total = complaints.length;
-    const pending = complaints.filter(c => c.status === 'pending').length;
-    const inProgress = complaints.filter(c => c.status === 'in_progress').length;
-    const resolved = complaints.filter(c => c.status === 'resolved').length;
-    const urgent = complaints.filter(c => c.priority === 'urgent').length;
-
-
-    return { total, pending, inProgress, resolved, urgent };
-  };
-
-  const stats = getStats();
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -113,29 +92,11 @@ const AdminComplaints = () => {
 
   return (
     <div className="space-y-6">
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'} shadow`}>
-          <div className="text-2xl font-bold text-blue-500">{stats.total}</div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total</div>
-        </div>
-        <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'} shadow`}>
-          <div className="text-2xl font-bold text-yellow-500">{stats.pending}</div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Pending</div>
-        </div>
-        <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'} shadow`}>
-          <div className="text-2xl font-bold text-blue-500">{stats.inProgress}</div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>In Progress</div>
-        </div>
-        <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-800' : 'bg-white'} shadow`}>
-          <div className="text-2xl font-bold text-green-500">{stats.resolved}</div>
-          <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Resolved</div>
-        </div>
-      </div>
+
 
       {/* Filters */}
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-4 rounded-lg shadow`}>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
               Status
@@ -165,21 +126,6 @@ const AdminComplaints = () => {
               <option value="all">All Categories</option>
               {categories.map(cat => (
                 <option key={cat.category_id} value={cat.category_id}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
-              Institution
-            </label>
-            <select
-              value={filters.institution}
-              onChange={(e) => setFilters({ ...filters, institution: e.target.value })}
-              className={`w-full border rounded px-3 py-2 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-            >
-              <option value="all">All Institutions</option>
-              {institutions.map(inst => (
-                <option key={inst.id} value={inst.id}>{inst.name}</option>
               ))}
             </select>
           </div>

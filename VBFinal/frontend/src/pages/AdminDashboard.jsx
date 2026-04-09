@@ -100,6 +100,7 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
     { id: 'feedback-templates', name: 'Feedback Templates', icon: '📋' },
     { id: 'contact', name: 'Contact', icon: '✉️' },
     { id: 'system', name: 'System', icon: '⚙️' },
+    { id: 'helpdesk', name: 'Helpdesk', icon: '🎧' },
     { id: 'profile', name: 'Profile', icon: '👤' }
   ];
 
@@ -201,6 +202,11 @@ const AdminDashboard = ({ initialTab = 'overview' }) => {
           items={menuItems}
           activeItem={activeTab}
           onItemClick={(id) => {
+            if (id === 'helpdesk') {
+              navigate('/helpdesk');
+              setSidebarOpen(false);
+              return;
+            }
             setActiveTab(id);
             navigate(`/admin?tab=${id}`, { replace: true });
             setSidebarOpen(false);

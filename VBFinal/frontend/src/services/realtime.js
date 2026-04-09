@@ -1,7 +1,11 @@
 const resolveWebSocketBase = () => {
-  const configured = import.meta.env.VITE_WS_URL?.trim();
+  const configured = import.meta.env.VITE_WEBSOCKET_URL?.trim() || import.meta.env.VITE_WS_URL?.trim();
   if (configured) {
-    return configured.replace(/\/+$/, '');
+    let normalized = configured.replace(/\/+$/, '');
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && normalized.startsWith('ws://')) {
+      normalized = normalized.replace(/^ws:\/\//, 'wss://');
+    }
+    return normalized;
   }
 
   if (import.meta.env.DEV) {

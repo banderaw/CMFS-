@@ -216,12 +216,6 @@ class ApiService {
     return this.request(`/system-logs/?${params.toString()}`);
   }
 
-  async clearSystemLogs() {
-    return this.request('/system-logs/clear/', {
-      method: 'DELETE',
-    });
-  }
-
   async updateMaintenanceStatus(data) {
     return this.request('/system/maintenance/', {
       method: 'PATCH',
@@ -317,8 +311,18 @@ class ApiService {
     return this.request(`/complaints/${complaintId}/comments/`);
   }
 
-  async getComplaintAnalytics() {
-    return this.request('/complaints/analytics/');
+  async getComplaintAnalytics(options = {}) {
+    const params = new URLSearchParams();
+    if (options.scope) {
+      params.append('scope', options.scope);
+    }
+    if (options.officerId) {
+      params.append('officer_id', String(options.officerId));
+    }
+
+    const query = params.toString();
+    const endpoint = query ? `/complaints/analytics/?${query}` : '/complaints/analytics/';
+    return this.request(endpoint);
   }
 
   // Responses
@@ -786,6 +790,62 @@ class ApiService {
   async deletePublicAnnouncement(id) {
     return this.request(`/announcements/${id}/`, {
       method: 'DELETE',
+    });
+  }
+
+  // Helpdesk
+  async getHelpdeskSessions() {
+    return this.request('/helpdesk/sessions/');
+  }
+
+  async getHelpdeskSessionCandidates() {
+    return this.request('/helpdesk/sessions/candidates/');
+  }
+
+  async createHelpdeskSession(data) {
+    return this.request('/helpdesk/sessions/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getHelpdeskSession(sessionId) {
+    return this.request(`/helpdesk/sessions/${sessionId}/`);
+  }
+
+  async deleteHelpdeskSession(sessionId) {
+    return this.request(`/helpdesk/sessions/${sessionId}/`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getHelpdeskMessages(sessionId) {
+    const query = new URLSearchParams({ session_id: sessionId }).toString();
+    return this.request(`/helpdesk/messages/?${query}`);
+  }
+
+  async createHelpdeskMessage(data) {
+    return this.request('/helpdesk/messages/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async startHelpdeskSession(sessionId) {
+    return this.request(`/helpdesk/sessions/${sessionId}/start/`, {
+      method: 'POST',
+    });
+  }
+
+  async endHelpdeskSession(sessionId) {
+    return this.request(`/helpdesk/sessions/${sessionId}/end/`, {
+      method: 'POST',
+    });
+  }
+
+  async getHelpdeskLivekitToken(sessionId) {
+    return this.request(`/helpdesk/sessions/${sessionId}/livekit-token/`, {
+      method: 'POST',
     });
   }
 }

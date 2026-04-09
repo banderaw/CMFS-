@@ -1,21 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import apiService from '../../services/api';
-import Modal from '../UI/Modal';
 import ResolverLevelManagement from './ResolverLevelManagement';
 import { CategoryManagement } from './CategoryManagement';
 import CategoryResolverManagement from './CategoryResolverManagement';
 
-const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, loading }) => {
+const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, loading, showAddButton = true, addButtonLabel = '+ Add' }) => {
   const thCls = 'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
   const tdCls = 'px-4 py-3 whitespace-nowrap text-sm';
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-700'}`}>{title}</h3>
-        <button onClick={onAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm w-full sm:w-auto">
-          + Add
-        </button>
+        {showAddButton && (
+          <button onClick={onAdd} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm w-full sm:w-auto">
+            {addButtonLabel}
+          </button>
+        )}
       </div>
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow overflow-hidden`}>
         {loading ? (
@@ -58,88 +59,140 @@ const CrudSection = ({ isDark, title, items, columns, onAdd, onEdit, onDelete, l
   );
 };
 
-const FormModal = ({ isDark, isOpen, onClose, title, fields, formData, onChange, onSubmit, editing }) => (
-  <Modal isOpen={isOpen} onClose={onClose} title={editing ? `Edit ${title}` : `Add ${title}`}>
-    <form onSubmit={onSubmit} className="space-y-4">
-      {fields.map(f => (
-        <div key={f.key}>
-          <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            {f.label}{f.required ? ' *' : ''}
-          </label>
-          {f.type === 'select' ? (
-            <select
-              required={f.required}
-              value={formData[f.key] || ''}
-              onChange={e => onChange(f.key, e.target.value)}
-              className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-            >
-              <option value="">Select {f.label}</option>
-              {f.options.map(o => <option key={o.id} value={o.id}>{o[f.displayKey]}</option>)}
-            </select>
-          ) : f.type === 'checkbox' ? (
-            <div className="mt-1 flex items-center gap-2">
+const BackButton = ({ isDark, onClick, label = 'Back' }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+      }`}
+  >
+    <span>←</span>
+    <span>{label}</span>
+  </button>
+);
+
+const SubTabLanding = ({ isDark, title, onView, onAdd }) => (
+  <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6`}>
+    <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{title}</h3>
+    <p className={`mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+      Choose what you want to do in this sub-tab.
+    </p>
+    <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <button
+        type="button"
+        onClick={onView}
+        className="px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700"
+      >
+        View {title}
+      </button>
+      <button
+        type="button"
+        onClick={onAdd}
+        className={`px-4 py-3 rounded-lg border font-medium ${isDark ? 'border-gray-600 text-gray-100 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+          }`}
+      >
+        Add {title}
+      </button>
+    </div>
+  </div>
+);
+
+const EntityFormPage = ({ isDark, title, fields, formData, onChange, onSubmit, onBack, editing }) => (
+  <div className="space-y-4">
+    <BackButton isDark={isDark} onClick={onBack} />
+    <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6`}>
+      <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+        {editing ? `Edit ${title}` : `Add ${title}`}
+      </h3>
+      <form onSubmit={onSubmit} className="space-y-4 mt-4">
+        {fields.map((f) => (
+          <div key={f.key}>
+            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              {f.label}
+              {f.required ? ' *' : ''}
+            </label>
+            {f.type === 'select' ? (
+              <select
+                required={f.required}
+                value={formData[f.key] || ''}
+                onChange={(e) => onChange(f.key, e.target.value)}
+                className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                  }`}
+              >
+                <option value="">Select {f.label}</option>
+                {(f.options || []).map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o[f.displayKey]}
+                  </option>
+                ))}
+              </select>
+            ) : f.type === 'checkbox' ? (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!formData[f.key]}
+                  onChange={(e) => onChange(f.key, e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Enabled</span>
+              </div>
+            ) : (
               <input
-                type="checkbox"
-                checked={!!formData[f.key]}
-                onChange={e => onChange(f.key, e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded"
+                type="text"
+                required={f.required}
+                value={formData[f.key] || ''}
+                onChange={(e) => onChange(f.key, e.target.value)}
+                placeholder={f.placeholder}
+                className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                  }`}
               />
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Enabled</span>
-            </div>
-          ) : (
-            <input
-              type="text"
-              required={f.required}
-              value={formData[f.key] || ''}
-              onChange={e => onChange(f.key, e.target.value)}
-              placeholder={f.placeholder}
-              className={`mt-1 block w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-            />
-          )}
+            )}
+          </div>
+        ))}
+        <div className="flex justify-end space-x-3 pt-2">
+          <button
+            type="button"
+            onClick={onBack}
+            className={`px-4 py-2 border rounded-lg ${isDark ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+          >
+            Cancel
+          </button>
+          <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            {editing ? 'Update' : 'Create'}
+          </button>
         </div>
-      ))}
-      <div className="flex justify-end space-x-3 pt-2">
-        <button type="button" onClick={onClose}
-          className={`px-4 py-2 border rounded-lg ${isDark ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>
-          Cancel
-        </button>
-        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          {editing ? 'Update' : 'Create'}
-        </button>
-      </div>
-    </form>
-  </Modal>
+      </form>
+    </div>
+  </div>
 );
 
 const InstitutionManagement = () => {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState('campuses');
+  const [tabMode, setTabMode] = useState('home');
 
   // Campuses
   const [campuses, setCampuses] = useState([]);
   const [campLoading, setCampLoading] = useState(false);
-  const [campModal, setCampModal] = useState(false);
   const [campEditing, setCampEditing] = useState(null);
   const [campForm, setCampForm] = useState({ campus_name: '' });
 
   // Colleges
   const [colleges, setColleges] = useState([]);
   const [colLoading, setColLoading] = useState(false);
-  const [colModal, setColModal] = useState(false);
   const [colEditing, setColEditing] = useState(null);
   const [colForm, setColForm] = useState({ college_name: '', college_campus: '' });
 
   // Departments
   const [departments, setDepartments] = useState([]);
   const [deptLoading, setDeptLoading] = useState(false);
-  const [deptModal, setDeptModal] = useState(false);
   const [deptEditing, setDeptEditing] = useState(null);
   const [deptForm, setDeptForm] = useState({ department_name: '', department_college: '' });
 
   // Programs
   const [programs, setPrograms] = useState([]);
   const [progLoading, setProgLoading] = useState(false);
-  const [progModal, setProgModal] = useState(false);
   const [progEditing, setProgEditing] = useState(null);
   const [progForm, setProgForm] = useState({ program_name: '', description: '', is_active: true });
 
@@ -179,6 +232,7 @@ const InstitutionManagement = () => {
 
   useEffect(() => { load('campuses'); }, []);
   useEffect(() => { load(activeTab); }, [activeTab]);
+  useEffect(() => { setTabMode('home'); }, [activeTab]);
 
   // Generic submit/delete helpers
   const handleSubmit = async (e, editing, form, createFn, updateFn, reloadTab) => {
@@ -206,10 +260,77 @@ const InstitutionManagement = () => {
   ];
 
   const renderContent = () => {
+    const isPageTab = ['campuses', 'colleges', 'departments', 'programs'].includes(activeTab);
+
+    if (isPageTab && tabMode === 'home') {
+      const titleMap = {
+        campuses: 'Campuses',
+        colleges: 'Colleges',
+        departments: 'Departments',
+        programs: 'Programs',
+      };
+      return (
+        <SubTabLanding
+          isDark={isDark}
+          title={titleMap[activeTab]}
+          onView={() => setTabMode('view')}
+          onAdd={() => {
+            if (activeTab === 'campuses') {
+              setCampEditing(null);
+              setCampForm({ campus_name: '', location: '', description: '', is_active: true });
+            }
+            if (activeTab === 'colleges') {
+              setColEditing(null);
+              setColForm({ college_name: '', college_code: '', college_campus: '', dean: '', description: '', is_active: true });
+            }
+            if (activeTab === 'departments') {
+              setDeptEditing(null);
+              setDeptForm({ department_name: '', department_code: '', department_college: '', head: '', description: '', is_active: true });
+            }
+            if (activeTab === 'programs') {
+              setProgEditing(null);
+              setProgForm({ program_name: '', description: '', is_active: true });
+            }
+            setTabMode('add');
+          }}
+        />
+      );
+    }
+
     switch (activeTab) {
       case 'campuses':
+        if (tabMode === 'add' || tabMode === 'edit') {
+          return (
+            <EntityFormPage
+              isDark={isDark}
+              title="Campus"
+              editing={campEditing}
+              formData={campForm}
+              onChange={(k, v) => setCampForm((p) => ({ ...p, [k]: v }))}
+              onBack={() => setTabMode('home')}
+              onSubmit={(e) => {
+                handleSubmit(
+                  e,
+                  campEditing,
+                  campForm,
+                  apiService.createCampus.bind(apiService),
+                  apiService.updateCampus.bind(apiService),
+                  'campuses'
+                );
+                setTabMode('view');
+              }}
+              fields={[
+                { key: 'campus_name', label: 'Campus Name', required: true, placeholder: 'e.g. Main Campus' },
+                { key: 'location', label: 'Location', placeholder: 'e.g. Gondar, Ethiopia' },
+                { key: 'description', label: 'Description', placeholder: 'Brief description...' },
+                { key: 'is_active', label: 'Active', type: 'checkbox' },
+              ]}
+            />
+          );
+        }
         return (
-          <>
+          <div className="space-y-4">
+            <BackButton isDark={isDark} onClick={() => setTabMode('home')} />
             <CrudSection
               isDark={isDark} title="Campuses" items={campuses} loading={campLoading}
               columns={[
@@ -218,44 +339,43 @@ const InstitutionManagement = () => {
                 { key: 'description', label: 'Description' },
                 { key: 'is_active', label: 'Active', render: c => c.is_active ? '✅' : '❌' },
               ]}
-              onAdd={() => { setCampEditing(null); setCampForm({ campus_name: '', location: '', description: '', is_active: true }); setCampModal(true); }}
-              onEdit={i => { setCampEditing(i); setCampForm({ campus_name: i.campus_name, location: i.location, description: i.description, is_active: i.is_active }); setCampModal(true); }}
+              onAdd={() => {
+                setCampEditing(null);
+                setCampForm({ campus_name: '', location: '', description: '', is_active: true });
+                setTabMode('add');
+              }}
+              onEdit={i => {
+                setCampEditing(i);
+                setCampForm({ campus_name: i.campus_name, location: i.location, description: i.description, is_active: i.is_active });
+                setTabMode('edit');
+              }}
               onDelete={id => handleDelete(id, apiService.deleteCampus.bind(apiService), 'campuses')}
+              addButtonLabel="+ Add Campus"
             />
-            <FormModal isDark={isDark} isOpen={campModal} onClose={() => setCampModal(false)}
-              title="Campus" editing={campEditing} formData={campForm}
-              onChange={(k, v) => setCampForm(p => ({ ...p, [k]: v }))}
-              onSubmit={e => { handleSubmit(e, campEditing, campForm, apiService.createCampus.bind(apiService), apiService.updateCampus.bind(apiService), 'campuses'); setCampModal(false); }}
-              fields={[
-                { key: 'campus_name', label: 'Campus Name', required: true, placeholder: 'e.g. Main Campus' },
-                { key: 'location', label: 'Location', placeholder: 'e.g. Gondar, Ethiopia' },
-                { key: 'description', label: 'Description', placeholder: 'Brief description...' },
-                { key: 'is_active', label: 'Active', type: 'checkbox' },
-              ]}
-            />
-          </>
+          </div>
         );
 
       case 'colleges':
-        return (
-          <>
-            <CrudSection
-              isDark={isDark} title="Colleges" items={colleges} loading={colLoading}
-              columns={[
-                { key: 'college_name', label: 'Name' },
-                { key: 'college_code', label: 'Code' },
-                { key: 'campus_name', label: 'Campus', render: c => c.campus_name || '—' },
-                { key: 'dean', label: 'Dean' },
-                { key: 'is_active', label: 'Active', render: c => c.is_active ? '✅' : '❌' },
-              ]}
-              onAdd={() => { setColEditing(null); setColForm({ college_name: '', college_code: '', college_campus: '', dean: '', description: '', is_active: true }); setColModal(true); }}
-              onEdit={i => { setColEditing(i); setColForm({ college_name: i.college_name, college_code: i.college_code, college_campus: i.college_campus, dean: i.dean, description: i.description, is_active: i.is_active }); setColModal(true); }}
-              onDelete={id => handleDelete(id, apiService.deleteCollege.bind(apiService), 'colleges')}
-            />
-            <FormModal isDark={isDark} isOpen={colModal} onClose={() => setColModal(false)}
-              title="College" editing={colEditing} formData={colForm}
-              onChange={(k, v) => setColForm(p => ({ ...p, [k]: v }))}
-              onSubmit={e => { handleSubmit(e, colEditing, colForm, apiService.createCollege.bind(apiService), apiService.updateCollege.bind(apiService), 'colleges'); setColModal(false); }}
+        if (tabMode === 'add' || tabMode === 'edit') {
+          return (
+            <EntityFormPage
+              isDark={isDark}
+              title="College"
+              editing={colEditing}
+              formData={colForm}
+              onChange={(k, v) => setColForm((p) => ({ ...p, [k]: v }))}
+              onBack={() => setTabMode('home')}
+              onSubmit={(e) => {
+                handleSubmit(
+                  e,
+                  colEditing,
+                  colForm,
+                  apiService.createCollege.bind(apiService),
+                  apiService.updateCollege.bind(apiService),
+                  'colleges'
+                );
+                setTabMode('view');
+              }}
               fields={[
                 { key: 'college_name', label: 'College Name', required: true, placeholder: 'e.g. College of Medicine' },
                 { key: 'college_code', label: 'Code', placeholder: 'e.g. COM' },
@@ -265,29 +385,57 @@ const InstitutionManagement = () => {
                 { key: 'is_active', label: 'Active', type: 'checkbox' },
               ]}
             />
-          </>
+          );
+        }
+        return (
+          <div className="space-y-4">
+            <BackButton isDark={isDark} onClick={() => setTabMode('home')} />
+            <CrudSection
+              isDark={isDark} title="Colleges" items={colleges} loading={colLoading}
+              columns={[
+                { key: 'college_name', label: 'Name' },
+                { key: 'college_code', label: 'Code' },
+                { key: 'campus_name', label: 'Campus', render: c => c.campus_name || '—' },
+                { key: 'dean', label: 'Dean' },
+                { key: 'is_active', label: 'Active', render: c => c.is_active ? '✅' : '❌' },
+              ]}
+              onAdd={() => {
+                setColEditing(null);
+                setColForm({ college_name: '', college_code: '', college_campus: '', dean: '', description: '', is_active: true });
+                setTabMode('add');
+              }}
+              onEdit={i => {
+                setColEditing(i);
+                setColForm({ college_name: i.college_name, college_code: i.college_code, college_campus: i.college_campus, dean: i.dean, description: i.description, is_active: i.is_active });
+                setTabMode('edit');
+              }}
+              onDelete={id => handleDelete(id, apiService.deleteCollege.bind(apiService), 'colleges')}
+              addButtonLabel="+ Add College"
+            />
+          </div>
         );
 
       case 'departments':
-        return (
-          <>
-            <CrudSection
-              isDark={isDark} title="Departments" items={departments} loading={deptLoading}
-              columns={[
-                { key: 'department_name', label: 'Name' },
-                { key: 'department_code', label: 'Code' },
-                { key: 'college_name', label: 'College', render: d => d.college_name || '—' },
-                { key: 'head', label: 'Head' },
-                { key: 'is_active', label: 'Active', render: d => d.is_active ? '✅' : '❌' },
-              ]}
-              onAdd={() => { setDeptEditing(null); setDeptForm({ department_name: '', department_code: '', department_college: '', head: '', description: '', is_active: true }); setDeptModal(true); }}
-              onEdit={i => { setDeptEditing(i); setDeptForm({ department_name: i.department_name, department_code: i.department_code, department_college: i.department_college, head: i.head, description: i.description, is_active: i.is_active }); setDeptModal(true); }}
-              onDelete={id => handleDelete(id, apiService.deleteDepartment.bind(apiService), 'departments')}
-            />
-            <FormModal isDark={isDark} isOpen={deptModal} onClose={() => setDeptModal(false)}
-              title="Department" editing={deptEditing} formData={deptForm}
-              onChange={(k, v) => setDeptForm(p => ({ ...p, [k]: v }))}
-              onSubmit={e => { handleSubmit(e, deptEditing, deptForm, apiService.createDepartment.bind(apiService), apiService.updateDepartment.bind(apiService), 'departments'); setDeptModal(false); }}
+        if (tabMode === 'add' || tabMode === 'edit') {
+          return (
+            <EntityFormPage
+              isDark={isDark}
+              title="Department"
+              editing={deptEditing}
+              formData={deptForm}
+              onChange={(k, v) => setDeptForm((p) => ({ ...p, [k]: v }))}
+              onBack={() => setTabMode('home')}
+              onSubmit={(e) => {
+                handleSubmit(
+                  e,
+                  deptEditing,
+                  deptForm,
+                  apiService.createDepartment.bind(apiService),
+                  apiService.updateDepartment.bind(apiService),
+                  'departments'
+                );
+                setTabMode('view');
+              }}
               fields={[
                 { key: 'department_name', label: 'Department Name', required: true, placeholder: 'e.g. Computer Science' },
                 { key: 'department_code', label: 'Code', placeholder: 'e.g. CS' },
@@ -297,12 +445,68 @@ const InstitutionManagement = () => {
                 { key: 'is_active', label: 'Active', type: 'checkbox' },
               ]}
             />
-          </>
+          );
+        }
+        return (
+          <div className="space-y-4">
+            <BackButton isDark={isDark} onClick={() => setTabMode('home')} />
+            <CrudSection
+              isDark={isDark} title="Departments" items={departments} loading={deptLoading}
+              columns={[
+                { key: 'department_name', label: 'Name' },
+                { key: 'department_code', label: 'Code' },
+                { key: 'college_name', label: 'College', render: d => d.college_name || '—' },
+                { key: 'head', label: 'Head' },
+                { key: 'is_active', label: 'Active', render: d => d.is_active ? '✅' : '❌' },
+              ]}
+              onAdd={() => {
+                setDeptEditing(null);
+                setDeptForm({ department_name: '', department_code: '', department_college: '', head: '', description: '', is_active: true });
+                setTabMode('add');
+              }}
+              onEdit={i => {
+                setDeptEditing(i);
+                setDeptForm({ department_name: i.department_name, department_code: i.department_code, department_college: i.department_college, head: i.head, description: i.description, is_active: i.is_active });
+                setTabMode('edit');
+              }}
+              onDelete={id => handleDelete(id, apiService.deleteDepartment.bind(apiService), 'departments')}
+              addButtonLabel="+ Add Department"
+            />
+          </div>
         );
 
       case 'programs':
+        if (tabMode === 'add' || tabMode === 'edit') {
+          return (
+            <EntityFormPage
+              isDark={isDark}
+              title="Program"
+              editing={progEditing}
+              formData={progForm}
+              onChange={(k, v) => setProgForm((prev) => ({ ...prev, [k]: v }))}
+              onBack={() => setTabMode('home')}
+              onSubmit={(e) => {
+                handleSubmit(
+                  e,
+                  progEditing,
+                  progForm,
+                  apiService.createProgram.bind(apiService),
+                  apiService.updateProgram.bind(apiService),
+                  'programs'
+                );
+                setTabMode('view');
+              }}
+              fields={[
+                { key: 'program_name', label: 'Program Name', required: true, placeholder: 'e.g. Software Engineering' },
+                { key: 'description', label: 'Description', placeholder: 'Brief description...' },
+                { key: 'is_active', label: 'Active', type: 'checkbox' },
+              ]}
+            />
+          );
+        }
         return (
-          <>
+          <div className="space-y-4">
+            <BackButton isDark={isDark} onClick={() => setTabMode('home')} />
             <CrudSection
               isDark={isDark} title="Programs" items={programs} loading={progLoading}
               columns={[
@@ -314,7 +518,7 @@ const InstitutionManagement = () => {
               onAdd={() => {
                 setProgEditing(null);
                 setProgForm({ program_name: '', description: '', is_active: true });
-                setProgModal(true);
+                setTabMode('add');
               }}
               onEdit={(item) => {
                 setProgEditing(item);
@@ -323,36 +527,12 @@ const InstitutionManagement = () => {
                   description: item.description || '',
                   is_active: item.is_active ?? true,
                 });
-                setProgModal(true);
+                setTabMode('edit');
               }}
               onDelete={(id) => handleDelete(id, apiService.deleteProgram.bind(apiService), 'programs')}
+              addButtonLabel="+ Add Program"
             />
-            <FormModal
-              isDark={isDark}
-              isOpen={progModal}
-              onClose={() => setProgModal(false)}
-              title="Program"
-              editing={progEditing}
-              formData={progForm}
-              onChange={(k, v) => setProgForm((prev) => ({ ...prev, [k]: v }))}
-              onSubmit={(e) => {
-                handleSubmit(
-                  e,
-                  progEditing,
-                  progForm,
-                  apiService.createProgram.bind(apiService),
-                  apiService.updateProgram.bind(apiService),
-                  'programs'
-                );
-                setProgModal(false);
-              }}
-              fields={[
-                { key: 'program_name', label: 'Program Name', required: true, placeholder: 'e.g. Software Engineering' },
-                { key: 'description', label: 'Description', placeholder: 'Brief description...' },
-                { key: 'is_active', label: 'Active', type: 'checkbox' },
-              ]}
-            />
-          </>
+          </div>
         );
 
       case 'resolver-levels':
@@ -379,8 +559,8 @@ const InstitutionManagement = () => {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1.5 transition-colors ${activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
+                  ? 'border-blue-500 text-blue-600'
+                  : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
                   }`}
               >
                 <span>{tab.icon}</span>

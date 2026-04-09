@@ -41,12 +41,6 @@ const OfficerDashboard = () => {
   const threadSnapshotRef = useRef('');
   const latestResponseRef = useRef(null);
   const latestCommentRef = useRef(null);
-  const [dashboardStats, setDashboardStats] = useState({
-    assignedComplaints: 0,
-    resolvedComplaints: 0,
-    pendingComplaints: 0,
-    totalTemplates: 0
-  });
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [reassignOfficerId, setReassignOfficerId] = useState('');
   const [reassignReason, setReassignReason] = useState('');
@@ -61,26 +55,6 @@ const OfficerDashboard = () => {
       setActiveTab(tab);
     }
   }, [location.search, menuItems]);
-
-  const fetchDashboardStats = useCallback(async () => {
-    try {
-      const complaintsData = await apiService.getComplaints();
-      const allComplaints = complaintsData.results || complaintsData || [];
-
-      const assignedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id).length;
-      const resolvedComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'resolved').length;
-      const pendingComplaints = allComplaints.filter(c => c.assigned_officer?.id === user?.id && c.status === 'pending').length;
-
-      setDashboardStats({
-        assignedComplaints,
-        resolvedComplaints,
-        pendingComplaints,
-        totalTemplates: 0,
-      });
-    } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-    }
-  }, [user?.id]);
 
   const fetchTemplates = async () => {
     setLoading(true);
@@ -151,17 +125,10 @@ const OfficerDashboard = () => {
       fetchCCComplaints();
     }
     if (activeTab === 'dashboard') {
-      fetchDashboardStats();
       fetchTemplates();
     }
-  }, [activeTab, user?.id, fetchComplaints, fetchDashboardStats]);
+  }, [activeTab, user?.id, fetchComplaints]);
 
-  useEffect(() => {
-    setDashboardStats((prev) => ({
-      ...prev,
-      totalTemplates: Array.isArray(templates) ? templates.length : 0,
-    }));
-  }, [templates]);
 
   const handleReassign = async () => {
     if (!reassignOfficerId) {
@@ -413,112 +380,64 @@ const OfficerDashboard = () => {
       case 'dashboard':
         return (
           <div>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Officer Dashboard</h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800">Assigned Complaints</h3>
-                  <p className="text-3xl font-bold text-blue-600">{dashboardStats.assignedComplaints}</p>
-                  <p className="text-sm text-blue-600">Total assigned</p>
-                </div>
-                <div className="bg-yellow-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold text-yellow-800">Pending</h3>
-                  <p className="text-3xl font-bold text-yellow-600">{dashboardStats.pendingComplaints}</p>
-                  <p className="text-sm text-yellow-600">Awaiting action</p>
-                </div>
-                <div className="bg-green-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold text-green-800">Resolved</h3>
-                  <p className="text-3xl font-bold text-green-600">{dashboardStats.resolvedComplaints}</p>
-                  <p className="text-sm text-green-600">Successfully resolved</p>
-                </div>
-                <div className="bg-purple-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-semibold text-purple-800">Templates</h3>
-                  <p className="text-3xl font-bold text-purple-600">{dashboardStats.totalTemplates}</p>
-                  <p className="text-sm text-purple-600">Feedback templates</p>
-                </div>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-xl font-semibold mb-4">Recent Complaints</h3>
-                {complaints.filter(c => c.assigned_officer?.id === user?.id).slice(0, 5).length > 0 ? (
-                  <div className="space-y-3">
-                    {complaints.filter(c => c.assigned_officer?.id === user?.id).slice(0, 5).map((complaint) => (
-                      <div key={complaint.complaint_id} className="p-3 border rounded-lg">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-medium text-sm">{complaint.title}</h4>
-                            <p className="text-xs text-gray-600">{complaint.category?.office_name || complaint.category?.name || 'Uncategorized'}</p>
-                          </div>
-                          <span className={`px-2 py-1 text-xs rounded ${complaint.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            complaint.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                              complaint.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                                'bg-gray-100 text-gray-800'
-                            }`}>
-                            {complaint.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-600">
-                    <p className="mb-4">No assigned complaints</p>
-                  </div>
-                )}
-                <div className="mt-4">
-                  <button
-                    onClick={() => setActiveTab('complaints')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                  >
-                    Manage All Complaints
-                  </button>
-                </div>
-              </div>
+            <div className="mt-10 space-y-6">
+              <ComplaintAnalyticsPanel
+                title="Assigned Complaint Analytics"
+                subtitle="current assigned complaints overview"
+                accent="emerald"
+                analyticsScope="officer"
+                officerId={user?.id}
+              />
 
               <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-xl font-semibold mb-4">Recent Templates</h3>
-                {loading ? (
-                  <div className="text-center py-8 text-gray-600">Loading...</div>
-                ) : !Array.isArray(templates) || templates.length === 0 ? (
-                  <div className="text-center py-8 text-gray-600">
-                    <p className="mb-4">No templates created yet</p>
-                    <button
-                      onClick={() => setActiveTab('create-template')}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                  <h3 className="text-2xl font-bold text-gray-800">Feedback Analytics</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={selectedTemplate || ''}
+                      onChange={(e) => setSelectedTemplate(e.target.value ? Number(e.target.value) : null)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg"
                     >
-                      Create Template
+                      <option value="">Select Template</option>
+                      {filteredTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.title}
+                        </option>
+                      ))}
+                    </select>
+                    {selectedTemplate && (
+                      <>
+                        <button
+                          onClick={() => exportResults(selectedTemplate, 'csv')}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                        >
+                          Export CSV
+                        </button>
+                        <button
+                          onClick={() => exportResults(selectedTemplate, 'json')}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Export JSON
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {selectedTemplate ? (
+                  <FeedbackAnalytics templateId={selectedTemplate} />
+                ) : (
+                  <div className="text-center py-12 text-gray-600">
+                    <p className="text-lg mb-4">Select a template to view analytics</p>
+                    <button
+                      onClick={() => setActiveTab('manage-templates')}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Go to Templates
                     </button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {templates.slice().reverse().slice(0, 5).map(template => (
-                      <div key={template.id} className="flex justify-between items-center p-3 border rounded-lg">
-                        <div>
-                          <h4 className="font-medium text-sm">{template.title}</h4>
-                          <p className="text-xs text-gray-600">
-                            Created: {new Date(template.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span className={`px-2 py-1 rounded text-xs font-semibold ${template.status === 'active' ? 'bg-green-100 text-green-800' :
-                          template.status === 'draft' ? 'bg-gray-100 text-gray-600' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                          {template.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 )}
-                <div className="mt-4">
-                  <button
-                    onClick={() => setActiveTab('manage-templates')}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm"
-                  >
-                    Manage All Templates
-                  </button>
-                </div>
               </div>
             </div>
           </div>
@@ -607,7 +526,7 @@ const OfficerDashboard = () => {
                 <div className="mt-8 space-y-4">
                   <div className="flex justify-between items-center">
                     <h3 className={`text-lg font-semibold text-purple-600 flex items-center gap-2`}>
-                      📋 CC'd Complaints ({ccComplaints.length})
+                      📋 CC Complaints ({ccComplaints.length})
                     </h3>
                   </div>
 
@@ -740,7 +659,7 @@ const OfficerDashboard = () => {
                       <button
                         onClick={() => {
                           setSelectedTemplate(template.id);
-                          setActiveTab('analytics');
+                          setActiveTab('dashboard');
                         }}
                         className="px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
                       >
@@ -786,53 +705,6 @@ const OfficerDashboard = () => {
           </div>
         );
 
-      case 'analytics':
-        return (
-          <div>
-            <div className="mb-6">
-              <ComplaintAnalyticsPanel
-                title="Assigned Complaint Analytics"
-                subtitle="Live updates for the complaints currently assigned to you."
-                accent="emerald"
-              />
-            </div>
-
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Analytics</h2>
-              {selectedTemplate && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => exportResults(selectedTemplate, 'csv')}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    onClick={() => exportResults(selectedTemplate, 'json')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Export JSON
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {selectedTemplate ? (
-              <FeedbackAnalytics templateId={selectedTemplate} />
-            ) : (
-              <div className="text-center py-16 text-gray-600">
-                <p className="text-lg mb-4">Select a template to view analytics</p>
-                <button
-                  onClick={() => setActiveTab('manage-templates')}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Go to Templates
-                </button>
-              </div>
-            )}
-          </div>
-        );
-
       case 'schedule':
         return <OfficerSchedule />;
 
@@ -867,6 +739,11 @@ const OfficerDashboard = () => {
           items={menuItems}
           activeItem={activeTab}
           onItemClick={(id) => {
+            if (id === 'helpdesk') {
+              navigate('/helpdesk');
+              setSidebarOpen(false);
+              return;
+            }
             setActiveTab(id);
             setSidebarOpen(false);
           }}

@@ -22,6 +22,9 @@ const OfficerDashboard = lazy(() => import('./pages/OfficerDashboard'));
 const UserDashboard = lazy(() => import('./pages/UserDashboard'));
 const OfficerComplaintDetail = lazy(() => import('./pages/OfficerComplaintDetail'));
 const UserComplaintDetail = lazy(() => import('./pages/UserComplaintDetail'));
+const HelpdeskHomePage = lazy(() => import('./helpdesk/pages/HelpdeskHomePage'));
+const HelpdeskChatPage = lazy(() => import('./helpdesk/pages/ChatPage'));
+const HelpdeskCreateSessionPage = lazy(() => import('./helpdesk/pages/CreateSessionPage'));
 
 // Simple loading fallback
 const RouteLoadingFallback = () => (
@@ -145,6 +148,30 @@ const AppContent = () => {
           element={
             <ProtectedRoute requiredRole="user">
               <UserComplaintDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/helpdesk"
+          element={
+            <ProtectedRoute>
+              <HelpdeskHomePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/helpdesk/:sessionId"
+          element={
+            <ProtectedRoute>
+              <HelpdeskChatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/helpdesk/new"
+          element={
+            <ProtectedRoute>
+              <HelpdeskCreateSessionPage />
             </ProtectedRoute>
           }
         />

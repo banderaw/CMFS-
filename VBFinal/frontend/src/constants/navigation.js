@@ -5,7 +5,7 @@ export const OFFICER_NAV_ITEMS = [
   { id: 'schedule', name: 'Schedule', icon: '📅' },
   { id: 'create-template', name: 'Create Template', icon: '➕' },
   { id: 'manage-templates', name: 'Manage Templates', icon: '📝' },
-  { id: 'analytics', name: 'Analytics', icon: '📈' },
+  { id: 'helpdesk', name: 'Helpdesk', icon: '🎧' },
   { id: 'profile', name: 'Profile', icon: '👤' },
 ];
 
@@ -15,5 +15,6 @@ export const getUserNavItems = (t, unreadCount = 0) => [
   { id: 'appointments', icon: '📅', name: t('appointments') },
   { id: 'notifications', icon: '🔔', name: t('notifications'), badge: unreadCount },
   { id: 'feedback', icon: '💬', name: t('feedback') },
+  { id: 'helpdesk', icon: '🎧', name: 'Helpdesk' },
   { id: 'profile', icon: '👤', name: t('profile') },
 ];

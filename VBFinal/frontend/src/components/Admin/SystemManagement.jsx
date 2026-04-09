@@ -4,6 +4,34 @@ import { useMaintenanceMode } from '../../contexts/MaintenanceContext';
 import apiService from '../../services/api';
 import systemLogger from '../../services/systemLogger';
 
+const MAINTENANCE_SCHEDULE_STORAGE_KEY = 'cmfs_maintenance_schedules_v1';
+
+const toDateTimeLocalValue = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
+};
+
+const getDurationMinutes = (startIso, endIso, fallback = 30) => {
+  if (!startIso || !endIso) return fallback;
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return fallback;
+  return Math.max(1, Math.round((end - start) / 60000));
+};
+
+const parseStoredSchedules = () => {
+  try {
+    const raw = localStorage.getItem(MAINTENANCE_SCHEDULE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 
 const SystemManagement = () => {
   const { isDark } = useTheme();
@@ -66,6 +94,8 @@ const SystemManagement = () => {
   const [scheduledMaintenanceTime, setScheduledMaintenanceTime] = useState('');
   const [maintenanceMessage, setMaintenanceMessage] = useState('System is under maintenance. Please try again later.');
   const [maintenanceDuration, setMaintenanceDuration] = useState(30);
+  const [maintenanceSchedules, setMaintenanceSchedules] = useState([]);
+  const [editingScheduleId, setEditingScheduleId] = useState(null);
   const [jwtSessionTimeout, setJwtSessionTimeout] = useState(30);
   const [availableTimeouts, setAvailableTimeouts] = useState([15, 30, 60, 120, 240]);
   const [realTimeStats, setRealTimeStats] = useState({
@@ -226,6 +256,42 @@ const SystemManagement = () => {
   useEffect(() => {
     setMaintenanceMessage(currentMaintenanceMessage || 'System is under maintenance. Please try again later.');
   }, [currentMaintenanceMessage]);
+
+  useEffect(() => {
+    setMaintenanceSchedules(parseStoredSchedules());
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(MAINTENANCE_SCHEDULE_STORAGE_KEY, JSON.stringify(maintenanceSchedules));
+  }, [maintenanceSchedules]);
+
+  useEffect(() => {
+    if (!maintenanceEndTime) {
+      return;
+    }
+
+    const hasExisting = maintenanceSchedules.some((schedule) => schedule.source === 'backend-live');
+    if (hasExisting) {
+      return;
+    }
+
+    const startIso = new Date().toISOString();
+    const durationMinutes = getDurationMinutes(startIso, maintenanceEndTime, maintenanceDuration);
+
+    setMaintenanceSchedules((prev) => [
+      {
+        id: `backend-live-${Date.now()}`,
+        source: 'backend-live',
+        title: 'Active Maintenance Window',
+        scheduled_start: startIso,
+        scheduled_end: maintenanceEndTime,
+        message: currentMaintenanceMessage || maintenanceMessage,
+        duration_minutes: durationMinutes,
+        status: 'active',
+      },
+      ...prev,
+    ]);
+  }, [currentMaintenanceMessage, maintenanceDuration, maintenanceEndTime, maintenanceMessage, maintenanceSchedules]);
 
   // Real-time system stats from backend
   const updateJwtTimeout = async (timeoutMinutes) => {
@@ -607,16 +673,103 @@ const SystemManagement = () => {
       return;
     }
 
+    const nextSchedule = {
+      id: editingScheduleId || `schedule-${Date.now()}`,
+      source: 'local',
+      title: `Scheduled Maintenance (${maintenanceDuration} min)`,
+      scheduled_start: scheduledTime.toISOString(),
+      scheduled_end: new Date(scheduledTime.getTime() + maintenanceDuration * 60 * 1000).toISOString(),
+      message: maintenanceMessage,
+      duration_minutes: maintenanceDuration,
+      status: 'scheduled',
+    };
+
+    setMaintenanceSchedules((prev) => {
+      if (!editingScheduleId) {
+        return [nextSchedule, ...prev].sort(
+          (a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime()
+        );
+      }
+      return prev
+        .map((item) => (item.id === editingScheduleId ? nextSchedule : item))
+        .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
+    });
+
+    setScheduledMaintenanceTime('');
+    setEditingScheduleId(null);
+    alert(editingScheduleId ? 'Maintenance schedule updated.' : 'Maintenance schedule saved.');
+  };
+
+  const handleEditSchedule = (schedule) => {
+    setEditingScheduleId(schedule.id);
+    setScheduledMaintenanceTime(toDateTimeLocalValue(schedule.scheduled_start));
+    setMaintenanceDuration(schedule.duration_minutes || getDurationMinutes(schedule.scheduled_start, schedule.scheduled_end, 30));
+    setMaintenanceMessage(schedule.message || 'System is under maintenance. Please try again later.');
+    setActiveSystemTab('maintenance');
+  };
+
+  const handleDeleteSchedule = (scheduleId) => {
+    if (!confirm('Delete this maintenance schedule?')) {
+      return;
+    }
+    setMaintenanceSchedules((prev) => prev.filter((item) => item.id !== scheduleId));
+    if (editingScheduleId === scheduleId) {
+      setEditingScheduleId(null);
+      setScheduledMaintenanceTime('');
+    }
+  };
+
+  const handleApplySchedule = async (schedule) => {
     try {
       await scheduleMaintenanceMode(
-        scheduledTime.toISOString(),
-        maintenanceMessage,
-        maintenanceDuration
+        schedule.scheduled_start,
+        schedule.message,
+        schedule.duration_minutes || getDurationMinutes(schedule.scheduled_start, schedule.scheduled_end, 30)
       );
-      alert(`Maintenance scheduled for ${scheduledTime.toLocaleString()}. Users will be notified.`);
-      setScheduledMaintenanceTime('');
+
+      setMaintenanceSchedules((prev) =>
+        prev.map((item) => ({
+          ...item,
+          status: item.id === schedule.id ? 'applied' : item.status,
+        }))
+      );
+
+      alert(`Scheduled maintenance synced to backend for ${new Date(schedule.scheduled_start).toLocaleString()}.`);
     } catch (error) {
-      alert(`Failed to schedule maintenance: ${error.message}`);
+      alert(`Failed to apply schedule: ${error.message}`);
+    }
+  };
+
+  const handleRunScheduleNow = async (schedule) => {
+    try {
+      const duration = schedule.duration_minutes || getDurationMinutes(schedule.scheduled_start, schedule.scheduled_end, 30);
+      await enableMaintenanceMode(schedule.message, duration);
+      setMaintenanceSchedules((prev) =>
+        prev.map((item) => ({
+          ...item,
+          status: item.id === schedule.id ? 'active' : item.status,
+        }))
+      );
+      alert('Maintenance started immediately using selected schedule.');
+    } catch (error) {
+      alert(`Failed to start maintenance now: ${error.message}`);
+    }
+  };
+
+  const handleCancelBackendSchedule = async () => {
+    if (!confirm('Cancel the currently configured backend maintenance schedule?')) {
+      return;
+    }
+
+    try {
+      await updateMaintenanceConfiguration({
+        is_enabled: false,
+        scheduled_start: null,
+        scheduled_end: null,
+      });
+      alert('Backend maintenance schedule cancelled.');
+    } catch (error) {
+      alert(`Failed to cancel backend schedule: ${error.message}`);
     }
   };
 
@@ -843,13 +996,109 @@ const SystemManagement = () => {
               className={`w-full p-3 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
             />
           </div>
-          <button
-            onClick={handleScheduleMaintenance}
-            className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-          >
-            Schedule Maintenance
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleScheduleMaintenance}
+              className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+            >
+              {editingScheduleId ? 'Update Schedule' : 'Add Schedule'}
+            </button>
+            {editingScheduleId && (
+              <button
+                onClick={() => {
+                  setEditingScheduleId(null);
+                  setScheduledMaintenanceTime('');
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Cancel Edit
+              </button>
+            )}
+            <button
+              onClick={handleCancelBackendSchedule}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Cancel Backend Schedule
+            </button>
+          </div>
         </div>
+      </div>
+
+      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
+        <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
+          Maintenance Schedule Manager
+        </h3>
+
+        {maintenanceSchedules.length === 0 ? (
+          <div className={`p-4 rounded-lg text-sm ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-50 text-gray-600'}`}>
+            No schedules yet. Add your first maintenance schedule above.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {maintenanceSchedules
+              .slice()
+              .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime())
+              .map((schedule) => (
+                <div
+                  key={schedule.id}
+                  className={`p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-700/40' : 'border-gray-200 bg-gray-50'}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {schedule.title || 'Maintenance Window'}
+                      </div>
+                      <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                        {new Date(schedule.scheduled_start).toLocaleString()} - {new Date(schedule.scheduled_end).toLocaleString()}
+                      </div>
+                      <div className={`text-xs mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Duration: {schedule.duration_minutes || getDurationMinutes(schedule.scheduled_start, schedule.scheduled_end, 30)} min | Source: {schedule.source === 'backend-live' ? 'Backend' : 'Local'}
+                      </div>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full font-semibold ${schedule.status === 'active'
+                      ? 'bg-red-100 text-red-700'
+                      : schedule.status === 'applied'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-700'
+                      }`}>
+                      {(schedule.status || 'scheduled').toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div className={`text-sm mt-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                    {schedule.message}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleApplySchedule(schedule)}
+                      className="px-3 py-1.5 rounded bg-blue-500 text-white hover:bg-blue-600 text-sm"
+                    >
+                      Apply to Backend
+                    </button>
+                    <button
+                      onClick={() => handleRunScheduleNow(schedule)}
+                      className="px-3 py-1.5 rounded bg-orange-500 text-white hover:bg-orange-600 text-sm"
+                    >
+                      Run Now
+                    </button>
+                    <button
+                      onClick={() => handleEditSchedule(schedule)}
+                      className="px-3 py-1.5 rounded bg-emerald-500 text-white hover:bg-emerald-600 text-sm"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSchedule(schedule.id)}
+                      className="px-3 py-1.5 rounded bg-rose-500 text-white hover:bg-rose-600 text-sm"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
 
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
@@ -860,7 +1109,7 @@ const SystemManagement = () => {
           Service-level actions are now managed from the backend. This panel focuses on maintenance, logs, sessions, and configuration.
         </div>
       </div>
-    </div>
+    </div >
   );
 
   const renderBackupRestore = () => (
@@ -1001,17 +1250,6 @@ const SystemManagement = () => {
             System Logs
           </h3>
           <div className="flex space-x-2">
-            <button
-              onClick={async () => {
-                if (!confirm('Clear all system logs?')) return;
-                await apiService.clearSystemLogs();
-                setLogPage(1);
-                await loadSystemLogs();
-              }}
-              className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition-colors"
-            >
-              Clear Logs
-            </button>
             <button
               onClick={loadSystemLogs}
               className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 transition-colors"

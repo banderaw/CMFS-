@@ -145,6 +145,11 @@ const UserDashboard = () => {
           items={menuItems}
           activeItem={activeTab}
           onItemClick={(id) => {
+            if (id === 'helpdesk') {
+              navigate('/helpdesk');
+              setSidebarOpen(false);
+              return;
+            }
             setActiveTab(id);
             setSidebarOpen(false);
           }}

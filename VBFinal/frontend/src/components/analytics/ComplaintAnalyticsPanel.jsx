@@ -27,7 +27,13 @@ const normalizeSummary = (data) => ({
   recent_complaints: Array.isArray(data?.recent_complaints) ? data.recent_complaints : [],
 });
 
-const ComplaintAnalyticsPanel = ({ title = 'Complaint Analytics', subtitle = '', accent = 'blue' }) => {
+const ComplaintAnalyticsPanel = ({
+  title = 'Complaint Analytics',
+  subtitle = '',
+  accent = 'blue',
+  analyticsScope = null,
+  officerId = null,
+}) => {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,7 +43,22 @@ const ComplaintAnalyticsPanel = ({ title = 'Complaint Analytics', subtitle = '',
 
   const loadAnalytics = useCallback(async () => {
     try {
-      const data = await apiService.getComplaintAnalytics();
+      const hasScopedRequest = Boolean(analyticsScope || officerId);
+      const requestOptions = {};
+      if (analyticsScope) requestOptions.scope = analyticsScope;
+      if (officerId) requestOptions.officerId = officerId;
+
+      let data;
+      try {
+        data = await apiService.getComplaintAnalytics(requestOptions);
+      } catch (scopedError) {
+        const shouldFallback = hasScopedRequest && /HTTP 400|HTTP 404/i.test(scopedError?.message || '');
+        if (!shouldFallback) {
+          throw scopedError;
+        }
+        data = await apiService.getComplaintAnalytics();
+      }
+
       setSummary(normalizeSummary(data));
       setError('');
     } catch (err) {
@@ -46,7 +67,7 @@ const ComplaintAnalyticsPanel = ({ title = 'Complaint Analytics', subtitle = '',
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [analyticsScope, officerId]);
 
   useEffect(() => {
     let mounted = true;

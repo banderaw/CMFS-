@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import apiService from '../../services/api';
-import Modal from '../UI/Modal';
+import CategoryResolverManagement from './CategoryResolverManagement';
 
 export const CategoryManagement = () => {
   const { isDark } = useTheme();
   const [categories, setCategories] = useState([]);
   const [filteredCategories, setFilteredCategories] = useState([]);
-  const [institutions, setInstitutions] = useState([]);
   const [campuses, setCampuses] = useState([]);
   const [colleges, setColleges] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [pageMode, setPageMode] = useState('home');
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -22,7 +21,6 @@ export const CategoryManagement = () => {
   });
   const [filters, setFilters] = useState({
     status: 'all',
-    institution: 'all',
     search: ''
   });
   const [formData, setFormData] = useState({
@@ -35,10 +33,35 @@ export const CategoryManagement = () => {
     is_active: true
   });
 
+  const resetForm = () => setFormData({ office_name: '', office_description: '', campus: '', college: '', department: '', parent: '', is_active: true });
+
+  const openCreatePage = () => {
+    setEditingCategory(null);
+    resetForm();
+    setPageMode('add');
+  };
+
+  const openEditPage = (category) => {
+    setEditingCategory(category);
+    setFormData({
+      office_name: category.office_name || category.name || '',
+      office_description: category.office_description || category.description || '',
+      campus: category.campus || '',
+      college: category.college || '',
+      department: category.department || '',
+      parent: category.parent || '',
+      is_active: category.is_active
+    });
+    setPageMode('edit');
+  };
+
+  const openViewPage = () => setPageMode('view');
+  const openHomePage = () => setPageMode('home');
+
   const applyFilters = useCallback(() => {
     let filtered = [...categories];
 
-    // Apply search filter
+
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase();
       filtered = filtered.filter(category =>
@@ -56,13 +79,6 @@ export const CategoryManagement = () => {
       });
     }
 
-    // Apply institution filter
-    if (filters.institution !== 'all') {
-      filtered = filtered.filter(category =>
-        category.institution === parseInt(filters.institution)
-      );
-    }
-
     setFilteredCategories(filtered);
   }, [categories, filters]);
 
@@ -73,9 +89,8 @@ export const CategoryManagement = () => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [categoriesResponse, institutionsData, campusesData, collegesData, departmentsData] = await Promise.all([
+      const [categoriesResponse, campusesData, collegesData, departmentsData] = await Promise.all([
         apiService.getCategories(pagination.currentPage),
-        apiService.getInstitutions(),
         apiService.getCampuses(),
         apiService.getColleges(),
         apiService.getDepartments()
@@ -93,7 +108,6 @@ export const CategoryManagement = () => {
         setCategories(categoriesResponse);
       }
 
-      setInstitutions(institutionsData.results || institutionsData);
       setCampuses(campusesData.results || campusesData);
       setColleges(collegesData.results || collegesData);
       setDepartments(departmentsData.results || departmentsData);
@@ -130,26 +144,16 @@ export const CategoryManagement = () => {
       }
 
       await fetchData();
-      setShowModal(false);
       setEditingCategory(null);
-      setFormData({ office_name: '', office_description: '', campus: '', college: '', department: '', parent: '', is_active: true });
+      resetForm();
+      setPageMode('view');
     } catch (error) {
       console.error('Error saving category:', error);
     }
   };
 
   const handleEdit = (category) => {
-    setEditingCategory(category);
-    setFormData({
-      office_name: category.office_name || category.name || '',
-      office_description: category.office_description || category.description || '',
-      campus: category.campus || '',
-      college: category.college || '',
-      department: category.department || '',
-      parent: category.parent || '',
-      is_active: category.is_active
-    });
-    setShowModal(true);
+    openEditPage(category);
   };
 
   const handleDelete = async (categoryId) => {
@@ -164,9 +168,7 @@ export const CategoryManagement = () => {
   };
 
   const openCreateModal = () => {
-    setEditingCategory(null);
-    setFormData({ office_name: '', office_description: '', campus: '', college: '', department: '', parent: '', is_active: true });
-    setShowModal(true);
+    openCreatePage();
   };
 
   const filteredColleges = formData.campus
@@ -179,225 +181,49 @@ export const CategoryManagement = () => {
 
   if (loading) return <div className="text-center py-4">Loading...</div>;
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-        <h3 className="text-lg font-semibold text-gray-700">Office Management</h3>
-        <button
-          onClick={openCreateModal}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 w-full sm:w-auto"
-        >
-          Add Office
-        </button>
+  const renderHeaderActions = (title) => (
+    <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-700">{title}</h3>
+        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>View records or add a new office.</p>
       </div>
-
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Search</label>
-            <input
-              type="text"
-              placeholder="Search offices..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-            />
-          </div>
-          <div>
-            <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div>
-            <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Institution</label>
-            <select
-              value={filters.institution}
-              onChange={(e) => setFilters({ ...filters, institution: e.target.value })}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
-            >
-              <option value="all">All Institutions</option>
-              {institutions.map(inst => (
-                <option key={inst.id} value={inst.id}>{inst.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={() => setFilters({ status: 'all', institution: 'all', search: '' })}
-              className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-            >
-              Clear Filters
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Results Counter */}
-      <div className="text-sm text-gray-600">
-        Showing {filteredCategories.length} of {pagination.totalItems} offices
-        {(filters.search || filters.status !== 'all' || filters.institution !== 'all') &&
-          ` (filtered from ${categories.length} on this page)`
-        }
-      </div>
-
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-[980px] w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Office Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campus</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">College</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Institution</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredCategories.length === 0 ? (
-                <tr>
-                  <td colSpan="9" className="px-6 py-4 text-center text-gray-500">
-                    {filters.search || filters.status !== 'all' || filters.institution !== 'all'
-                      ? 'No offices match the current filters.'
-                      : 'No offices found. Click "Add Office" to create one.'}
-                  </td>
-                </tr>
-              ) : (
-                filteredCategories.map((category) => (
-                  <tr key={category.category_id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <div>
-                        <div className="font-medium">{category.office_name || category.name}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {category.office_description || category.description || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {category.campus_name || campuses.find(campus => campus.id === category.campus)?.campus_name || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {category.college_name || colleges.find(college => college.id === category.college)?.college_name || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {category.department_name || departments.find(department => department.id === category.department)?.department_name || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {category.parent_name || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {institutions.find(inst => inst.id === category.institution)?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${category.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                        }`}>
-                        {category.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEdit(category)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(category.category_id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Pagination */}
-      <div className="bg-white px-4 sm:px-6 py-3 border-t border-gray-200">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-gray-700">
-            Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
-            {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
-            {pagination.totalItems} results
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handlePageChange(pagination.currentPage - 1)}
-              disabled={pagination.currentPage === 1}
-              className={`px-3 py-1 rounded text-sm ${pagination.currentPage === 1
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-                }`}
-            >
-              Previous
-            </button>
-
-            {[...Array(pagination.totalPages)].map((_, index) => {
-              const page = index + 1;
-              if (
-                page === 1 ||
-                page === pagination.totalPages ||
-                (page >= pagination.currentPage - 1 && page <= pagination.currentPage + 1)
-              ) {
-                return (
-                  <button
-                    key={page}
-                    onClick={() => handlePageChange(page)}
-                    className={`px-3 py-1 rounded text-sm ${page === pagination.currentPage
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                  >
-                    {page}
-                  </button>
-                );
-              } else if (
-                page === pagination.currentPage - 2 ||
-                page === pagination.currentPage + 2
-              ) {
-                return <span key={page} className="px-2">...</span>;
-              }
-              return null;
-            })}
-
-            <button
-              onClick={() => handlePageChange(pagination.currentPage + 1)}
-              disabled={pagination.currentPage === pagination.totalPages}
-              className={`px-3 py-1 rounded text-sm ${pagination.currentPage === pagination.totalPages
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-500 text-white hover:bg-blue-600'
-                }`}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title={editingCategory ? 'Edit Office' : 'Add Office'}
-        size="lg"
+      <button
+        onClick={openCreateModal}
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 w-full sm:w-auto"
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        Add Office
+      </button>
+    </div>
+  );
+
+  const renderBackButton = () => (
+    <button
+      type="button"
+      onClick={openHomePage}
+      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+    >
+      <span>←</span>
+      <span>Back</span>
+    </button>
+  );
+
+  const renderLanding = () => (
+    <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6`}>
+      <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Office Management</h3>
+      <p className={`mt-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Choose to view offices or add a new office.</p>
+      <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button onClick={openViewPage} className="px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">View Offices</button>
+        <button onClick={openCreatePage} className={`px-4 py-3 rounded-lg border font-medium ${isDark ? 'border-gray-600 text-gray-100 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>Add Office</button>
+      </div>
+    </div>
+  );
+
+  const renderFormPage = () => (
+    <div className="space-y-4">
+      {renderBackButton()}
+      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6`}>
+        <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{editingCategory ? 'Edit Office' : 'Add Office'}</h3>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Office Name *</label>
             <input
@@ -468,6 +294,7 @@ export const CategoryManagement = () => {
               ))}
             </select>
           </div>
+
           <div>
             <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Parent Office</label>
             <select
@@ -477,7 +304,7 @@ export const CategoryManagement = () => {
             >
               <option value="">No Parent (Top Level Office)</option>
               {categories
-                .filter(cat => cat.category_id !== editingCategory?.category_id) // Don't allow self as parent
+                .filter(cat => cat.category_id !== editingCategory?.category_id)
                 .map((category) => (
                   <option key={category.category_id} value={category.category_id}>
                     {category.office_name || category.name}
@@ -485,6 +312,7 @@ export const CategoryManagement = () => {
                 ))}
             </select>
           </div>
+
           <div className="flex items-center">
             <input
               type="checkbox"
@@ -497,10 +325,11 @@ export const CategoryManagement = () => {
               Active
             </label>
           </div>
+
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:space-x-3">
             <button
               type="button"
-              onClick={() => setShowModal(false)}
+              onClick={openHomePage}
               className={`px-4 py-2 border rounded-lg transition-colors ${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
             >
               Cancel
@@ -513,12 +342,153 @@ export const CategoryManagement = () => {
             </button>
           </div>
         </form>
-      </Modal>
+      </div>
+    </div>
+  );
+
+  const renderViewPage = () => (
+    <div className="space-y-4">
+      {renderBackButton()}
+      {renderHeaderActions('Office Management')}
+
+      <div className="bg-white p-4 rounded-lg shadow">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Search</label>
+            <input
+              type="text"
+              placeholder="Search offices..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+            />
+          </div>
+          <div>
+            <label className={`block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"} mb-1`}>Status</label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300"}`}
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-sm text-gray-600">
+        Showing {filteredCategories.length} of {pagination.totalItems} offices
+        {(filters.search || filters.status !== 'all') && ` (filtered from ${categories.length} on this page)`}
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-[980px] w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Office Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campus</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">College</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredCategories.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="px-6 py-4 text-center text-gray-500">
+                    {filters.search || filters.status !== 'all'
+                      ? 'No offices match the current filters.'
+                      : 'No offices found. Click "Add Office" to create one.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredCategories.map((category) => (
+                  <tr key={category.category_id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <div className="font-medium">{category.office_name || category.name}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{category.office_description || category.description || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{category.campus_name || campuses.find(campus => campus.id === category.campus)?.campus_name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{category.college_name || colleges.find(college => college.id === category.college)?.college_name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{category.department_name || departments.find(department => department.id === category.department)?.department_name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{category.parent_name || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${category.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {category.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button onClick={() => handleEdit(category)} className="text-blue-600 hover:text-blue-800">Edit</button>
+                      <button onClick={() => handleDelete(category.category_id)} className="text-red-600 hover:text-red-800">Delete</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="bg-white px-4 sm:px-6 py-3 border-t border-gray-200">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-700">
+              Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} to{' '}
+              {Math.min(pagination.currentPage * pagination.itemsPerPage, pagination.totalItems)} of{' '}
+              {pagination.totalItems} results
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                disabled={pagination.currentPage === 1}
+                className={`px-3 py-1 rounded text-sm ${pagination.currentPage === 1 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+              >
+                Previous
+              </button>
+              {[...Array(pagination.totalPages)].map((_, index) => {
+                const page = index + 1;
+                if (page === 1 || page === pagination.totalPages || (page >= pagination.currentPage - 1 && page <= pagination.currentPage + 1)) {
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-3 py-1 rounded text-sm ${page === pagination.currentPage ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                    >
+                      {page}
+                    </button>
+                  );
+                }
+                if (page === pagination.currentPage - 2 || page === pagination.currentPage + 2) {
+                  return <span key={page} className="px-2">...</span>;
+                }
+                return null;
+              })}
+              <button
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                disabled={pagination.currentPage === pagination.totalPages}
+                className={`px-3 py-1 rounded text-sm ${pagination.currentPage === pagination.totalPages ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {pageMode === 'home' && renderLanding()}
+      {pageMode === 'view' && renderViewPage()}
+      {(pageMode === 'add' || pageMode === 'edit') && renderFormPage()}
     </div>
   );
 };
-
-import CategoryResolverManagement from './CategoryResolverManagement';
 
 const CategoryManagementWithAssignments = () => {
   const { isDark } = useTheme();
@@ -531,20 +501,13 @@ const CategoryManagementWithAssignments = () => {
 
   return (
     <div className="space-y-6">
-      {/* Horizontal Tabs */}
       <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <nav className="flex space-x-8" aria-label="Tabs">
           {subTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id)}
-              className={`
-                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-                ${activeSubTab === tab.id
-                  ? `${isDark ? 'border-blue-500 text-blue-500' : 'border-blue-600 text-blue-600'}`
-                  : `${isDark ? 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`
-                }
-              `}
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeSubTab === tab.id ? `${isDark ? 'border-blue-500 text-blue-500' : 'border-blue-600 text-blue-600'}` : `${isDark ? 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}`}
             >
               <span className="mr-2">{tab.icon}</span>
               {tab.name}
@@ -553,7 +516,6 @@ const CategoryManagementWithAssignments = () => {
         </nav>
       </div>
 
-      {/* Tab Content */}
       <div>
         {activeSubTab === 'categories' && <CategoryManagement />}
         {activeSubTab === 'assignments' && <CategoryResolverManagement />}
