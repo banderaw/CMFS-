@@ -23,18 +23,24 @@ const RegisterComplete = () => {
     first_name: firstName,
     last_name: lastName,
     gmail_account: '',
+    student_id: '',
+    student_type: '',
     campus_id: '',
     phone: '',
     user_campus: '',
     college: '',
     department: '',
+    program: '',
+    year_of_study: '',
     password: '',
     confirm_password: '',
   });
 
   const [campuses, setCampuses] = useState([]);
+  const [studentTypes, setStudentTypes] = useState([]);
   const [colleges, setColleges] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [programs, setPrograms] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,8 +51,16 @@ const RegisterComplete = () => {
       apiService.setToken(accessToken);
     }
 
-    apiService.getCampuses()
-      .then((data) => setCampuses(data.results || data || []))
+    Promise.all([
+      apiService.getCampuses(),
+      apiService.getStudentTypes(),
+      apiService.getPrograms(),
+    ])
+      .then(([campusesData, studentTypesData, programsData]) => {
+        setCampuses(campusesData.results || campusesData || []);
+        setStudentTypes(studentTypesData.results || studentTypesData || []);
+        setPrograms(programsData.results || programsData || []);
+      })
       .catch(() => { });
   }, [accessToken, refreshToken]);
 
@@ -86,8 +100,13 @@ const RegisterComplete = () => {
     setError('');
     setSuccess('');
 
-    if (!formData.campus_id || !formData.user_campus || !formData.college) {
+    if (!formData.campus_id || !formData.user_campus || !formData.college || !formData.department) {
       setError('Please fill in all required fields marked with *');
+      return;
+    }
+
+    if (formData.year_of_study && Number(formData.year_of_study) <= 0) {
+      setError('Year of study must be greater than 0.');
       return;
     }
 
@@ -111,6 +130,10 @@ const RegisterComplete = () => {
       };
 
       if (formData.department) payload.department = formData.department;
+      if (formData.student_id?.trim()) payload.student_id = formData.student_id.trim();
+      if (formData.student_type) payload.student_type = formData.student_type;
+      if (formData.program) payload.program = formData.program;
+      if (formData.year_of_study) payload.year_of_study = parseInt(formData.year_of_study, 10);
       if (formData.phone?.trim()) payload.phone = formData.phone;
       if (formData.gmail_account?.trim()) payload.gmail_account = formData.gmail_account.trim().toLowerCase();
       if (formData.first_name && formData.first_name !== firstName) payload.first_name = formData.first_name;
@@ -206,8 +229,24 @@ const RegisterComplete = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
+                  <label className={labelCls}>Student ID</label>
+                  <input type="text" name="student_id" value={formData.student_id} onChange={handleChange} placeholder="UGR/..../.." className={inputCls} />
+                </div>
+                <div>
                   <label className={labelCls}>Campus ID *</label>
                   <input type="text" name="campus_id" required value={formData.campus_id} onChange={handleChange} placeholder="UoG/..." className={inputCls} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelCls}>Student Type</label>
+                  <select name="student_type" value={formData.student_type} onChange={handleChange} className={inputCls}>
+                    <option value="">Select student type</option>
+                    {studentTypes.map((type) => (
+                      <option key={type.id} value={type.id}>{type.type_name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className={labelCls}>Phone Number</label>
@@ -238,7 +277,7 @@ const RegisterComplete = () => {
               </div>
 
               <div>
-                <label className={labelCls}>College / Institute *</label>
+                <label className={labelCls}>College *</label>
                 <select name="college" value={formData.college} onChange={handleChange} required disabled={!formData.user_campus} className={inputCls}>
                   <option value="">{formData.user_campus ? 'Select your college' : 'Select a campus first'}</option>
                   {colleges.map(college => (
@@ -248,13 +287,29 @@ const RegisterComplete = () => {
               </div>
 
               <div>
-                <label className={labelCls}>Department</label>
-                <select name="department" value={formData.department} onChange={handleChange} disabled={!formData.college} className={inputCls}>
-                  <option value="">{formData.college ? 'Select your department (optional)' : 'Select a college first'}</option>
+                <label className={labelCls}>Department *</label>
+                <select name="department" value={formData.department} onChange={handleChange} required disabled={!formData.college} className={inputCls}>
+                  <option value="">{formData.college ? 'Select your department' : 'Select a college first'}</option>
                   {departments.map(department => (
                     <option key={department.id} value={department.id}>{department.department_name}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className={labelCls}>Program</label>
+                  <select name="program" value={formData.program} onChange={handleChange} className={inputCls}>
+                    <option value="">Select your program</option>
+                    {programs.map((program) => (
+                      <option key={program.id} value={program.id}>{program.program_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Year of Study</label>
+                  <input type="number" min="1" name="year_of_study" value={formData.year_of_study} onChange={handleChange} placeholder="e.g. 1" className={inputCls} />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

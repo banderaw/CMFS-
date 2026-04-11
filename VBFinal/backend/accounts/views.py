@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.conf import settings
 from django.db.models import Count, Q
 from rest_framework import permissions, status, viewsets
@@ -256,18 +254,6 @@ class SystemViewSet(viewsets.ViewSet):
             return [permissions.AllowAny()]
         return [IsAdminRole()]
 
-    @action(detail=False, methods=['get'], url_path='stats')
-    def stats(self, request):
-        from conf.system_monitor import get_system_stats
-
-        return get_system_stats(request._request)
-
-    @action(detail=False, methods=['get'], url_path='alerts')
-    def alerts(self, request):
-        from conf.system_monitor import get_system_alerts
-
-        return get_system_alerts(request._request)
-
     @action(detail=False, methods=['get', 'post'], url_path='jwt-session')
     def jwt_session(self, request):
         from conf.jwt_session import jwt_session_config
@@ -290,58 +276,6 @@ class SystemViewSet(viewsets.ViewSet):
         serializer.save(updated_by=request.user)
         config.refresh_from_db()
         return Response(MaintenanceConfigurationSerializer(config).data, status=status.HTTP_200_OK)
-
-    @action(detail=False, methods=['get'], url_path='active-sessions')
-    def active_sessions(self, request):
-        try:
-            from django.utils import timezone
-
-            lookback_time = timezone.now() - timedelta(hours=24)
-
-            recent_logs = (
-                SystemLog.objects.filter(created_at__gte=lookback_time, user__isnull=False)
-                .exclude(user='')
-                .exclude(ip_address__isnull=True)
-                .order_by('-created_at')
-            )
-
-            user_sessions = {}
-            for log in recent_logs:
-                key = f'{log.user}_{log.ip_address}'
-                if key in user_sessions:
-                    continue
-
-                try:
-                    user_obj = User.objects.get(email=log.user)
-                    user_sessions[key] = {
-                        'id': user_obj.id,
-                        'email': user_obj.email,
-                        'first_name': user_obj.first_name or 'Unknown',
-                        'last_name': user_obj.last_name or 'User',
-                        'role': user_obj.role,
-                        'ip_address': log.ip_address,
-                        'last_activity': log.created_at.isoformat(),
-                        'method': log.method,
-                        'path': log.path,
-                        'status_code': log.status_code,
-                    }
-                except User.DoesNotExist:
-                    user_sessions[key] = {
-                        'email': log.user,
-                        'first_name': 'Unknown',
-                        'last_name': 'User',
-                        'role': 'user',
-                        'ip_address': log.ip_address,
-                        'last_activity': log.created_at.isoformat(),
-                        'method': log.method,
-                        'path': log.path,
-                        'status_code': log.status_code,
-                    }
-
-            sessions = sorted(user_sessions.values(), key=lambda item: item['last_activity'], reverse=True)
-            return Response({'count': len(sessions), 'results': sessions}, status=status.HTTP_200_OK)
-        except Exception as exc:
-            return Response({'count': 0, 'results': [], 'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class MicrosoftAuthViewSet(viewsets.ViewSet):
@@ -480,7 +414,7 @@ class ProgramViewSet(PublicReadAdminWriteMixin, viewsets.ModelViewSet):
     serializer_class = ProgramSerializer
 
 
-class StudentTypeViewSet(AdminOnlyModelViewSet):
+class StudentTypeViewSet(PublicReadAdminWriteMixin, viewsets.ModelViewSet):
     queryset = StudentType.objects.order_by('id')
     serializer_class = StudentTypeSerializer
 

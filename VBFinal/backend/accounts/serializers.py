@@ -213,6 +213,11 @@ class UserProfileMixin:
     user_campus = serializers.IntegerField(required=False, allow_null=True)
     college = serializers.IntegerField(required=False, allow_null=True)
     department = serializers.IntegerField(required=False, allow_null=True)
+    employee_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    student_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    student_type = serializers.IntegerField(required=False, allow_null=True)
+    program = serializers.IntegerField(required=False, allow_null=True)
+    year_of_study = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_email(self, value):
         return value.strip().lower()
@@ -234,6 +239,11 @@ class UserProfileMixin:
             'user_campus': validated_data.pop('user_campus', serializers.empty),
             'college': validated_data.pop('college', serializers.empty),
             'department': validated_data.pop('department', serializers.empty),
+            'employee_id': validated_data.pop('employee_id', serializers.empty),
+            'student_id': validated_data.pop('student_id', serializers.empty),
+            'student_type': validated_data.pop('student_type', serializers.empty),
+            'program': validated_data.pop('program', serializers.empty),
+            'year_of_study': validated_data.pop('year_of_study', serializers.empty),
         }
 
     def _normalize_optional_int(self, value):
@@ -245,10 +255,15 @@ class UserProfileMixin:
         campus_pk = self._normalize_optional_int(profile_data['user_campus'])
         college_pk = self._normalize_optional_int(profile_data['college'])
         department_pk = self._normalize_optional_int(profile_data['department'])
+        student_type_pk = self._normalize_optional_int(profile_data['student_type'])
+        program_pk = self._normalize_optional_int(profile_data['program'])
+        year_of_study = self._normalize_optional_int(profile_data['year_of_study'])
 
         campus = None
         college = None
         department = None
+        student_type = None
+        program = None
 
         if campus_pk not in (None, serializers.empty):
             campus = Campus.objects.filter(pk=campus_pk).first()
@@ -274,13 +289,31 @@ class UserProfileMixin:
         if role == User.ROLE_USER and college and department is None:
             raise serializers.ValidationError({'department': 'Student users must select a department.'})
 
+        if student_type_pk not in (None, serializers.empty):
+            student_type = StudentType.objects.filter(pk=student_type_pk).first()
+            if student_type is None:
+                raise serializers.ValidationError({'student_type': 'Selected student type does not exist.'})
+
+        if program_pk not in (None, serializers.empty):
+            program = Program.objects.filter(pk=program_pk).first()
+            if program is None:
+                raise serializers.ValidationError({'program': 'Selected program does not exist.'})
+
+        if year_of_study not in (None, serializers.empty) and year_of_study <= 0:
+            raise serializers.ValidationError({'year_of_study': 'Year of study must be greater than 0.'})
+
         return {
             'campus': campus,
             'college': college,
             'department': department,
+            'student_type': student_type,
+            'program': program,
+            'year_of_study': year_of_study,
             'campus_pk': campus_pk,
             'college_pk': college_pk,
             'department_pk': department_pk,
+            'student_type_pk': student_type_pk,
+            'program_pk': program_pk,
         }
 
     def _validate_role_change(self, role):
@@ -299,16 +332,22 @@ class UserProfileMixin:
 
     def _sync_profiles(self, user, profile_data, role):
         campus_id_value = profile_data['campus_id']
+        student_id_value = profile_data['student_id']
+        employee_id_value = profile_data['employee_id']
         refs = self._validate_scope_references(profile_data, role)
         department = refs['department']
         college = refs['college']
+        student_type = refs['student_type']
+        program = refs['program']
+        year_of_study = refs['year_of_study']
 
         if role == User.ROLE_USER:
             if getattr(user, 'officer_profile', None) is not None:
                 raise serializers.ValidationError({'role': 'This user already has an officer profile.'})
 
             should_update_student = any(
-                profile_data[key] is not serializers.empty for key in ['campus_id', 'department', 'college', 'user_campus']
+                profile_data[key] is not serializers.empty
+                for key in ['campus_id', 'department', 'college', 'user_campus', 'student_id', 'student_type', 'program', 'year_of_study']
             ) or getattr(user, 'student_profile', None) is not None
 
             if should_update_student:
@@ -322,20 +361,37 @@ class UserProfileMixin:
                 if profile_data['department'] is not serializers.empty:
                     student_profile.department = department
 
+                if student_id_value is not serializers.empty:
+                    student_profile.student_id = (student_id_value or None)
+
+                if profile_data['student_type'] is not serializers.empty:
+                    student_profile.student_type = student_type
+
+                if profile_data['program'] is not serializers.empty:
+                    student_profile.program = program
+
+                if profile_data['year_of_study'] is not serializers.empty:
+                    student_profile.year_of_study = year_of_study
+
                 student_profile.save()
 
         elif role == User.ROLE_OFFICER:
             if getattr(user, 'student_profile', None) is not None:
                 raise serializers.ValidationError({'role': 'This user already has a student profile.'})
 
-            should_update_officer = any(
-                profile_data[key] is not serializers.empty for key in ['college', 'department']
-            ) or getattr(user, 'officer_profile', None) is not None
+            should_update_officer = (
+                role == User.ROLE_OFFICER
+                or any(profile_data[key] is not serializers.empty for key in ['employee_id', 'college', 'department'])
+                or getattr(user, 'officer_profile', None) is not None
+            )
 
             if should_update_officer:
                 officer_profile = getattr(user, 'officer_profile', None)
                 if officer_profile is None:
                     officer_profile = Officer(user=user)
+
+                if employee_id_value is not serializers.empty:
+                    officer_profile.employee_id = employee_id_value or None
 
                 if profile_data['college'] is not serializers.empty:
                     officer_profile.college = college
@@ -370,6 +426,11 @@ class UserProfileMixin:
 class UserReadWriteBaseSerializer(UserProfileMixin, serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    employee_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    student_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    student_type = serializers.IntegerField(required=False, allow_null=True)
+    program = serializers.IntegerField(required=False, allow_null=True)
+    year_of_study = serializers.IntegerField(required=False, allow_null=True)
     full_name = serializers.CharField(read_only=True)
     role_level = serializers.IntegerField(read_only=True)
     student_profile = StudentSerializer(read_only=True)
@@ -394,6 +455,11 @@ class UserReadWriteBaseSerializer(UserProfileMixin, serializers.ModelSerializer)
             'user_campus',
             'college',
             'department',
+            'employee_id',
+            'student_id',
+            'student_type',
+            'program',
+            'year_of_study',
             'is_active',
             'is_staff',
             'is_email_verified',
@@ -471,6 +537,8 @@ class AdminUserSerializer(UserReadWriteBaseSerializer):
                 raise serializers.ValidationError({'email': 'This email is already in use.'})
             if 'accounts_user_gmail_account' in message:
                 raise serializers.ValidationError({'gmail_account': 'This Gmail account is already in use.'})
+            if 'accounts_officer_employee_id' in message:
+                raise serializers.ValidationError({'employee_id': 'This employee ID is already in use.'})
             raise serializers.ValidationError({'detail': 'Unable to create account with the provided data.'})
 
         self._sync_profiles(user, profile_data, user.role)
@@ -497,10 +565,14 @@ class LoginSerializer(serializers.Serializer):
         return data
 
 
-class RegisterSerializer(serializers.ModelSerializer):
+class RegisterSerializer(UserProfileMixin, serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, min_length=8)
     gmail_account = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    student_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    student_type = serializers.IntegerField(required=False, allow_null=True)
+    program = serializers.IntegerField(required=False, allow_null=True)
+    year_of_study = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -511,6 +583,14 @@ class RegisterSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'phone',
+            'campus_id',
+            'user_campus',
+            'college',
+            'department',
+            'student_id',
+            'student_type',
+            'program',
+            'year_of_study',
             'password',
             'confirm_password',
         ]
@@ -532,15 +612,32 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data.get('password') != data.get('confirm_password'):
             raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
+
+        profile_data = {
+            'campus_id': data.get('campus_id', serializers.empty),
+            'user_campus': data.get('user_campus', serializers.empty),
+            'college': data.get('college', serializers.empty),
+            'department': data.get('department', serializers.empty),
+            'student_id': data.get('student_id', serializers.empty),
+            'student_type': data.get('student_type', serializers.empty),
+            'program': data.get('program', serializers.empty),
+            'year_of_study': data.get('year_of_study', serializers.empty),
+        }
+        self._validate_scope_references(profile_data, User.ROLE_USER)
         return data
 
+    @transaction.atomic
     def create(self, validated_data):
+        profile_data = self._extract_profile_data(validated_data)
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
         email = validated_data.pop('email')
 
         try:
-            return User.objects.create_user(email=email, password=password, **validated_data)
+            user = User.objects.create_user(email=email, password=password, **validated_data)
+            self._sync_profiles(user, profile_data, user.role)
+            user.refresh_from_db()
+            return user
         except IntegrityError as exc:
             message = str(exc)
             if 'accounts_user_username' in message:
@@ -549,6 +646,10 @@ class RegisterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'email': 'This email is already in use.'})
             if 'accounts_user_gmail_account' in message:
                 raise serializers.ValidationError({'gmail_account': 'This Gmail account is already in use.'})
+            if 'accounts_student_student_id' in message:
+                raise serializers.ValidationError({'student_id': 'This student ID is already in use.'})
+            if 'accounts_student_campus_id' in message:
+                raise serializers.ValidationError({'campus_id': 'This campus ID is already in use.'})
             raise serializers.ValidationError({'detail': 'Unable to create account with the provided data.'})
 
 

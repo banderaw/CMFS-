@@ -196,11 +196,6 @@ class ApiService {
     });
   }
 
-  // Active Sessions
-  async getActiveSessions() {
-    return this.request('/system/active-sessions/');
-  }
-
   async getMaintenanceStatus() {
     return this.request('/system/maintenance/', {
       skipAuth: true,
@@ -498,6 +493,7 @@ class ApiService {
 
   // Programs
   async getPrograms() { return this.request('/programs/'); }
+  async getStudentTypes() { return this.request('/student-types/'); }
   async createProgram(data) { return this.request('/programs/', { method: 'POST', body: JSON.stringify(data) }); }
   async updateProgram(id, data) { return this.request(`/programs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }); }
   async deleteProgram(id) { return this.request(`/programs/${id}/`, { method: 'DELETE' }); }

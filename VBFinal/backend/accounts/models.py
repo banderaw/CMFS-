@@ -445,6 +445,31 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         officer_profile = getattr(self, 'officer_profile', None)
         return officer_profile.department_id if officer_profile else None
+
+    @property
+    def employee_id(self):
+        officer_profile = getattr(self, 'officer_profile', None)
+        return officer_profile.employee_id if officer_profile else None
+
+    @property
+    def student_id(self):
+        student_profile = getattr(self, 'student_profile', None)
+        return student_profile.student_id if student_profile else None
+
+    @property
+    def student_type(self):
+        student_profile = getattr(self, 'student_profile', None)
+        return student_profile.student_type_id if student_profile else None
+
+    @property
+    def program(self):
+        student_profile = getattr(self, 'student_profile', None)
+        return student_profile.program_id if student_profile else None
+
+    @property
+    def year_of_study(self):
+        student_profile = getattr(self, 'student_profile', None)
+        return student_profile.year_of_study if student_profile else None
     
     def get_accessible_complaints(self):
         from complaints.models import Complaint

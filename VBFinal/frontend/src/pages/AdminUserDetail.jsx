@@ -43,6 +43,7 @@ const AdminUserDetail = () => {
     user_campus: '',
     college: '',
     department: '',
+    employee_id: '',
     role: 'user',
     is_active: true,
   });
@@ -76,6 +77,7 @@ const AdminUserDetail = () => {
         user_campus: matchedUser.user_campus || '',
         college: matchedUser.college || '',
         department: matchedUser.department || '',
+        employee_id: matchedUser.employee_id || matchedUser.officer_profile?.employee_id || '',
         role: matchedUser.role || 'user',
         is_active: Boolean(matchedUser.is_active),
       });
@@ -153,6 +155,7 @@ const AdminUserDetail = () => {
         user_campus: formData.user_campus || null,
         college: formData.college || null,
         department: formData.department || null,
+        employee_id: formData.role === 'officer' ? (formData.employee_id || null) : null,
       };
 
       await apiService.updateUser(user.id, payload);
@@ -373,6 +376,19 @@ const AdminUserDetail = () => {
                     </label>
                   </div>
                 </div>
+
+                {formData.role === 'officer' && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Employee ID</label>
+                    <input
+                      name="employee_id"
+                      value={formData.employee_id}
+                      onChange={handleChange}
+                      placeholder="EMP-..."
+                      className={`w-full px-3 py-2 border rounded-md ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                    />
+                  </div>
+                )}
 
                 <div className="flex justify-end space-x-2 pt-2">
                   <button type="button" onClick={() => navigate('/admin?tab=users')} className={`px-4 py-2 border rounded-md ${isDark ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>

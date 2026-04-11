@@ -10,6 +10,22 @@ const API_BASE_URL = normalizeApiBase(import.meta.env.VITE_API_URL);
 const AUTH_API_URL = `${API_BASE_URL}/accounts`;
 
 class AuthService {
+  async parseResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+
+    if (isJson) {
+      try {
+        return await response.json();
+      } catch {
+        return {};
+      }
+    }
+
+    const text = await response.text();
+    return { detail: text || 'Unexpected server response' };
+  }
+
   setAuthData(data) {
     if (data?.access) {
       localStorage.setItem('token', data.access);
@@ -32,10 +48,16 @@ class AuthService {
         body: JSON.stringify({ identifier, password }),
       });
 
-      const data = await response.json();
+      const data = await this.parseResponse(response);
 
       if (!response.ok) {
-        throw new Error(data.non_field_errors?.[0] || data.detail || 'Login failed');
+        const detail = typeof data?.detail === 'string' ? data.detail : '';
+        const isHtmlError = detail.startsWith('<!DOCTYPE') || detail.startsWith('<html');
+        throw new Error(
+          data?.non_field_errors?.[0]
+          || (!isHtmlError ? detail : '')
+          || `Login failed (HTTP ${response.status})`
+        );
       }
 
       if (data.access) {
@@ -59,10 +81,12 @@ class AuthService {
         body: JSON.stringify(userData),
       });
 
-      const data = await response.json();
+      const data = await this.parseResponse(response);
 
       if (!response.ok) {
-        const errorMsg = Object.values(data).flat().join(', ') || 'Registration failed';
+        const errorMsg = typeof data === 'object'
+          ? (Object.values(data).flat().join(', ') || 'Registration failed')
+          : 'Registration failed';
         throw new Error(errorMsg);
       }
 
@@ -92,7 +116,7 @@ class AuthService {
         body: JSON.stringify({ refresh: refreshToken }),
       });
 
-      const data = await response.json();
+      const data = await this.parseResponse(response);
 
       if (!response.ok) {
         throw new Error(data.detail || 'Token refresh failed');

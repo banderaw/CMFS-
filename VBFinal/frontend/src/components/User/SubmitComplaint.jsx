@@ -102,6 +102,10 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
     .filter((resolver) => String(resolver.category) === String(complaintForm.category) && resolver.active)
     .sort((a, b) => (a.level_name || '').localeCompare(b.level_name || ''));
 
+  const selectCategory = (categoryValue) => {
+    setComplaintForm((prev) => ({ ...prev, category: categoryValue }));
+  };
+
   const ccOfficeOptions = categories;
   const selectedCcOffices = ccOfficeOptions.filter((office) => ccOfficeIds.includes(office.value));
 
@@ -293,18 +297,39 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
                   <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                     {language === 'am' ? 'ምድብ' : 'Category'} *
                   </label>
-                  <select
-                    value={complaintForm.category}
-                    onChange={(e) => setComplaintForm({ ...complaintForm, category: e.target.value })}
-                    className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} ${formErrors.category ? 'border-red-500' : ''}`}
-                  >
-                    <option value="">{language === 'am' ? 'ምድብ ይምረጡ' : 'Select category'}</option>
-                    {categories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {categories.map((cat) => {
+                      const isSelected = String(complaintForm.category) === String(cat.value);
+                      return (
+                        <button
+                          key={cat.value}
+                          type="button"
+                          onClick={() => selectCategory(cat.value)}
+                          className={`text-left w-full rounded-xl border p-4 transition-all duration-200 ${isSelected
+                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500 dark:bg-blue-900/20'
+                            : isDark
+                              ? 'border-gray-600 bg-gray-700 hover:border-blue-400 hover:bg-gray-600'
+                              : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
+                            }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {cat.label}
+                              </div>
+                              <div className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {language === 'am' ? 'በመጫን ይምረጡ' : 'Tap to select'}
+                              </div>
+                            </div>
+                            <div className={`mt-0.5 h-5 w-5 rounded-full border flex items-center justify-center ${isSelected ? 'border-blue-500 bg-blue-500' : isDark ? 'border-gray-500' : 'border-gray-300'}`}>
+                              {isSelected && <span className="text-white text-[10px] leading-none">✓</span>}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input type="hidden" value={complaintForm.category} readOnly />
                   {formErrors.category && <p className="text-red-500 text-sm mt-1 flex items-center"><span className="mr-1">⚠️</span>{formErrors.category}</p>}
                 </div>
 

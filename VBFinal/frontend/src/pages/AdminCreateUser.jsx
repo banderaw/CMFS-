@@ -42,6 +42,7 @@ const AdminCreateUser = () => {
     user_campus: '',
     college: '',
     department: '',
+    employee_id: '',
     role: 'user',
     is_active: true,
     password: '',
@@ -127,6 +128,7 @@ const AdminCreateUser = () => {
         user_campus: formData.user_campus || null,
         college: formData.college || null,
         department: formData.department || null,
+        employee_id: formData.role === 'officer' ? (formData.employee_id || null) : null,
       };
 
       await apiService.createUser(payload);
@@ -280,6 +282,20 @@ const AdminCreateUser = () => {
                   </select>
                 </div>
               </div>
+
+              {formData.role === 'officer' && (
+                <div>
+                  <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Employee ID</label>
+                  <input
+                    name="employee_id"
+                    type="text"
+                    value={formData.employee_id}
+                    onChange={handleChange}
+                    placeholder="EMP-..."
+                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

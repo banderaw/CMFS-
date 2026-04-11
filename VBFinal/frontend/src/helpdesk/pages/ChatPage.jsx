@@ -24,9 +24,9 @@ const LivekitTrackTile = ({ publication, participantName, isLocal }) => {
   }, [track]);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+    <div className="mx-auto w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 p-2">
       {isVideo ? (
-        <video ref={mediaRef} autoPlay playsInline muted={isLocal} className="h-32 w-full rounded bg-slate-900 object-cover" />
+        <video ref={mediaRef} autoPlay playsInline muted={isLocal} className="h-72 w-full rounded bg-slate-100 object-cover" />
       ) : (
         <audio ref={mediaRef} autoPlay muted={isLocal} />
       )}
@@ -36,8 +36,8 @@ const LivekitTrackTile = ({ publication, participantName, isLocal }) => {
   );
 };
 
-const DEFAULT_LIVEKIT_LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '::1'];
-const DEFAULT_LIVEKIT_FALLBACK_HOSTS = ['127.0.0.1', 'localhost', '::1'];
+const DEFAULT_LIVEKIT_LOCAL_HOSTNAMES = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+const DEFAULT_LIVEKIT_FALLBACK_HOSTS = ['127.0.0.1', 'localhost', '0.0.0.0', '::1'];
 
 const parseHostList = (rawValue, fallbackHosts) => {
   const source = (rawValue || '').trim();
@@ -116,6 +116,15 @@ const formatMediaDeviceError = (err, label) => {
   return err?.message || `Unable to start ${label.toLowerCase()}.`;
 };
 
+const requestCameraAccess = async () => {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Camera access is not supported in this browser.');
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  stream.getTracks().forEach((track) => track.stop());
+};
+
 const ChatPage = () => {
   const { sessionId } = useParams();
   const { user } = useAuth();
@@ -134,6 +143,7 @@ const ChatPage = () => {
   const [participantTracks, setParticipantTracks] = useState([]);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
+  const [cameraPermissionBlocked, setCameraPermissionBlocked] = useState(false);
   const canConnectRealtime = !loading && !error && Boolean(session?.id);
   const supportsLivekit = ['audio_call', 'video_call', 'audio_conference', 'video_conference'].includes(session?.kind);
   const isVideoSession = ['video_call', 'video_conference'].includes(session?.kind);
@@ -346,15 +356,19 @@ const ChatPage = () => {
 
       if (isVideoSession) {
         try {
+          await requestCameraAccess();
           await room.localParticipant.setCameraEnabled(true);
           setIsCameraEnabled(true);
+          setCameraPermissionBlocked(false);
           rebuildParticipantTracks(room);
         } catch (camErr) {
           setIsCameraEnabled(false);
+          setCameraPermissionBlocked(camErr?.name === 'NotAllowedError' || `${camErr?.message || ''}`.toLowerCase().includes('permission'));
           setConferenceError(formatMediaDeviceError(camErr, 'Camera'));
         }
       } else {
         setIsCameraEnabled(false);
+        setCameraPermissionBlocked(false);
       }
     } catch (err) {
       setConferenceError(err.message || 'Failed to join conference.');
@@ -372,6 +386,7 @@ const ChatPage = () => {
     setConferenceStatus('disconnected');
     setIsMicMuted(false);
     setIsCameraEnabled(false);
+    setCameraPermissionBlocked(false);
   };
 
   const toggleMic = async () => {
@@ -399,9 +414,32 @@ const ChatPage = () => {
     try {
       await room.localParticipant.setCameraEnabled(shouldEnable);
       setIsCameraEnabled(shouldEnable);
+      setCameraPermissionBlocked(false);
       rebuildParticipantTracks(room);
     } catch (err) {
+      if (shouldEnable && (err?.name === 'NotAllowedError' || `${err?.message || ''}`.toLowerCase().includes('permission'))) {
+        setCameraPermissionBlocked(true);
+      }
       setConferenceError(err.message || 'Unable to change camera state.');
+    }
+  };
+
+  const handleAllowCameraAccess = async () => {
+    const room = roomRef.current;
+    if (!room || !conferenceConnected || !isVideoSession) return;
+
+    try {
+      setConferenceError('');
+      await requestCameraAccess();
+      await room.localParticipant.setCameraEnabled(true);
+      setIsCameraEnabled(true);
+      setCameraPermissionBlocked(false);
+      rebuildParticipantTracks(room);
+    } catch (err) {
+      if (err?.name === 'NotAllowedError' || `${err?.message || ''}`.toLowerCase().includes('permission')) {
+        setCameraPermissionBlocked(true);
+      }
+      setConferenceError(formatMediaDeviceError(err, 'Camera'));
     }
   };
 
@@ -519,9 +557,23 @@ const ChatPage = () => {
                 disabled={!conferenceConnected || !isVideoSession}
                 className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
-                {isCameraEnabled ? 'Turn Camera Off' : 'Turn Camera On'}
+                {isCameraEnabled ? 'Turn Camera Off' : cameraPermissionBlocked ? 'Allow Camera Access' : 'Turn Camera On'}
               </button>
             </div>
+
+            {cameraPermissionBlocked && isVideoSession && conferenceConnected && !isCameraEnabled && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                Camera access is blocked. Click Allow Camera Access and approve the browser prompt, or enable camera access in your browser site settings.
+                <div className="mt-2">
+                  <button
+                    onClick={handleAllowCameraAccess}
+                    className="rounded-md bg-amber-600 px-2.5 py-1.5 font-semibold text-white hover:bg-amber-700"
+                  >
+                    Ask for Camera Access Again
+                  </button>
+                </div>
+              </div>
+            )}
 
             <p className="text-xs text-slate-600">Conference state: {conferenceStatus.replace('_', ' ')}</p>
             {conferenceError && <p className="text-xs text-rose-700">{conferenceError}</p>}

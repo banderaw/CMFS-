@@ -98,34 +98,12 @@ const SystemManagement = () => {
   const [editingScheduleId, setEditingScheduleId] = useState(null);
   const [jwtSessionTimeout, setJwtSessionTimeout] = useState(30);
   const [availableTimeouts, setAvailableTimeouts] = useState([15, 30, 60, 120, 240]);
-  const [realTimeStats, setRealTimeStats] = useState({
-    cpu: 0,
-    memory: 0,
-    disk: 0,
-    network: 0,
-    activeSessions: 0,
-    responseTime: 0
-  });
-  const [statsHistory, setStatsHistory] = useState({
-    cpu: [],
-    memory: [],
-    disk: [],
-    timestamps: []
-  });
-  const [systemAlerts, setSystemAlerts] = useState([]);
-  const [showActiveSessionsModal, setShowActiveSessionsModal] = useState(false);
-  const [activeSessions, setActiveSessions] = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsError, setSessionsError] = useState(null);
-  const [lastRefresh, setLastRefresh] = useState(null);
-  const [statsAvailable, setStatsAvailable] = useState(false);
-  const [statsError, setStatsError] = useState(null);
 
   const systemTabs = [
+    { id: 'overview', name: 'Overview', icon: '📊' },
     { id: 'maintenance', name: 'Maintenance', icon: '🔧' },
     { id: 'backup', name: 'Backup & Restore', icon: '💾' },
     { id: 'logs', name: 'System Logs', icon: '📋' },
-    { id: 'monitoring', name: 'Performance & Monitoring', icon: '📈' },
     { id: 'security', name: 'Security & Configuration', icon: '🔒' }
   ];
 
@@ -149,81 +127,6 @@ const SystemManagement = () => {
     }
   }, []);
 
-  const updateRealTimeStats = useCallback(async () => {
-    try {
-      const response = await apiService.request('/system/stats/');
-
-      if (response && response.system) {
-        const systemData = response.system;
-        const newStats = {
-          cpu: Math.max(0, Math.min(100, systemData.cpu || 0)),
-          memory: Math.max(0, Math.min(100, systemData.memory || 0)),
-          disk: Math.max(0, Math.min(100, systemData.disk || 0)),
-          network: (systemData.network_recv || 0) + (systemData.network_sent || 0),
-          activeSessions: systemData.process_count || 0,
-          responseTime: (Math.random() * 0.5) + 0.2
-        };
-
-        setRealTimeStats(newStats);
-        setStatsAvailable(true);
-        setStatsError(null);
-
-        setSystemStats(prev => ({
-          ...prev,
-          uptime: systemData.uptime_hours ? `${Math.floor(systemData.uptime_hours / 24)} days, ${Math.floor(systemData.uptime_hours % 24)} hours` : prev.uptime,
-          database: response.database || prev.database,
-          django: response.django || prev.django,
-          system_info: response.system_info || prev.system_info,
-          totalComplaints: response.django?.total_complaints || prev.totalComplaints,
-          activeUsers: response.django?.active_users || prev.activeUsers
-        }));
-
-        const now = new Date();
-        const timeString = now.toLocaleTimeString();
-
-        setStatsHistory(prev => ({
-          cpu: [...prev.cpu.slice(-19), newStats.cpu],
-          memory: [...prev.memory.slice(-19), newStats.memory],
-          disk: [...prev.disk.slice(-19), newStats.disk],
-          timestamps: [...prev.timestamps.slice(-19), timeString]
-        }));
-      } else {
-        setStatsAvailable(false);
-        setStatsError('System metrics unavailable. Unable to fetch real-time data from server.');
-        setRealTimeStats({
-          cpu: 0,
-          memory: 0,
-          disk: 0,
-          network: 0,
-          activeSessions: 0,
-          responseTime: 0
-        });
-      }
-    } catch (error) {
-      setStatsAvailable(false);
-      setStatsError(`Failed to load system metrics: ${error.message}`);
-      setRealTimeStats({
-        cpu: 0,
-        memory: 0,
-        disk: 0,
-        network: 0,
-        activeSessions: 0,
-        responseTime: 0
-      });
-    }
-  }, []);
-
-  const loadSystemAlerts = useCallback(async () => {
-    try {
-      const response = await apiService.request('/system/alerts/');
-      if (response && response.alerts) {
-        setSystemAlerts(response.alerts);
-      }
-    } catch (error) {
-      console.error('Failed to load system alerts:', error);
-    }
-  }, []);
-
   const loadJwtConfig = useCallback(async () => {
     try {
       const response = await apiService.getJwtConfig();
@@ -239,19 +142,11 @@ const SystemManagement = () => {
   useEffect(() => {
     loadSystemStats();
 
-    updateRealTimeStats();
-    const interval = setInterval(updateRealTimeStats, 9000);
-
-    loadSystemAlerts();
-    const alertsInterval = setInterval(loadSystemAlerts, 90000);
-
     loadJwtConfig();
 
     return () => {
-      clearInterval(interval);
-      clearInterval(alertsInterval);
     };
-  }, [loadJwtConfig, loadSystemAlerts, loadSystemStats, updateRealTimeStats]);
+  }, [loadJwtConfig, loadSystemStats]);
 
   useEffect(() => {
     setMaintenanceMessage(currentMaintenanceMessage || 'System is under maintenance. Please try again later.');
@@ -366,46 +261,6 @@ const SystemManagement = () => {
   useEffect(() => {
     loadSystemLogs();
   }, [loadSystemLogs]);
-
-  const loadActiveSessions = useCallback(async () => {
-    setSessionsLoading(true);
-    setSessionsError(null);
-    try {
-      const data = await apiService.getActiveSessions();
-      if (data && data.results) {
-        setActiveSessions(data.results);
-        setLastRefresh(new Date());
-      } else if (Array.isArray(data)) {
-        setActiveSessions(data);
-        setLastRefresh(new Date());
-      } else {
-        setActiveSessions([]);
-        setSessionsError('No session data received');
-      }
-    } catch (error) {
-      console.error('Failed to load active sessions:', error);
-      setActiveSessions([]);
-      setSessionsError(error.message || 'Failed to load active sessions. Make sure you are logged in as an admin.');
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, []);
-
-  const handleOpenActiveSessions = useCallback(() => {
-    setShowActiveSessionsModal(true);
-    loadActiveSessions();
-  }, [loadActiveSessions]);
-
-  // Auto-refresh sessions when modal is open
-  useEffect(() => {
-    if (!showActiveSessionsModal) return;
-
-    const refreshInterval = setInterval(() => {
-      loadActiveSessions();
-    }, 100000);
-
-    return () => clearInterval(refreshInterval);
-  }, [loadActiveSessions, showActiveSessionsModal]);
 
   const handleBackup = async (backupType = 'full') => {
     setLoading(true);
@@ -794,12 +649,6 @@ const SystemManagement = () => {
             <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
               {systemStats.django.total_users || 0} total
             </div>
-            <button
-              onClick={handleOpenActiveSessions}
-              className={`mt-2 text-xs px-2 py-1 rounded ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'} transition-colors`}
-            >
-              View Sessions
-            </button>
           </div>
           <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
             <div className="text-2xl font-bold text-purple-500">{systemStats.uptime}</div>
@@ -809,63 +658,6 @@ const SystemManagement = () => {
             </div>
           </div>
         </div>
-
-        {/* Database Stats */}
-        <div className="mt-6">
-          <h4 className={`text-md font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
-            Database Statistics
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-              <div className="text-xl font-bold text-indigo-500">{systemStats.database.size}</div>
-              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Database Size</div>
-            </div>
-            <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-              <div className="text-xl font-bold text-cyan-500">{systemStats.database.active_connections}</div>
-              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Connections</div>
-            </div>
-            <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-              <div className="text-xl font-bold text-teal-500">{systemStats.database.total_queries}</div>
-              <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Queries</div>
-            </div>
-          </div>
-        </div>
-
-        {/* System Alerts */}
-        {systemAlerts.length > 0 && (
-          <div className="mt-6">
-            <h4 className={`text-md font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
-              System Alerts ({systemAlerts.length})
-            </h4>
-            <div className="space-y-2">
-              {systemAlerts.slice(0, 5).map((alert, index) => (
-                <div key={index} className={`p-3 rounded-lg border-l-4 ${alert.type === 'critical' ? 'border-red-500 bg-red-50' :
-                  alert.type === 'warning' ? 'border-yellow-500 bg-yellow-50' :
-                    'border-blue-500 bg-blue-50'
-                  }`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-sm font-medium ${alert.type === 'critical' ? 'text-red-800' :
-                        alert.type === 'warning' ? 'text-yellow-800' :
-                          'text-blue-800'
-                        }`}>
-                        {alert.type.toUpperCase()}
-                      </span>
-                      <span className="text-sm text-gray-600">{alert.category}</span>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded ${alert.type === 'critical' ? 'bg-red-100 text-red-700' :
-                      alert.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                      Threshold: {alert.threshold}%
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-700 mt-1">{alert.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1384,223 +1176,60 @@ const SystemManagement = () => {
     </div>
   );
 
-  const renderPerformance = () => (
-    <div className="space-y-6">
-      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-        <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-          Real-Time Performance Metrics
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-2xl font-bold text-blue-500">{realTimeStats.responseTime.toFixed(1)}s</div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Response Time</div>
-          </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-2xl font-bold text-green-500">99.9%</div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Uptime</div>
-          </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-2xl font-bold text-purple-500">{realTimeStats.activeSessions}</div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Sessions</div>
-          </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-2xl font-bold text-orange-500">{realTimeStats.network.toFixed(0)} MB/s</div>
-            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Network I/O</div>
-          </div>
-        </div>
-
-        {/* Real-time Resource Usage */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Resource Usage (Live)</h4>
-              <span className="flex items-center space-x-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs font-semibold rounded-full">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span>Real-time</span>
-              </span>
-            </div>
-            <div className="space-y-4">
-              {/* CPU Usage */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>CPU Usage</span>
-                  <span className={`font-mono ${realTimeStats.cpu > 80 ? 'text-red-500' :
-                    realTimeStats.cpu > 60 ? 'text-yellow-500' : 'text-green-500'
-                    }`}>
-                    {realTimeStats.cpu.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                  <div
-                    className={`h-3 rounded-full transition-all duration-500 ${realTimeStats.cpu > 80 ? 'bg-red-500' :
-                      realTimeStats.cpu > 60 ? 'bg-yellow-500' : 'bg-green-500'
-                      }`}
-                    style={{ width: `${realTimeStats.cpu}%` }}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-20 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Memory Usage */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Memory Usage</span>
-                  <span className={`font-mono ${realTimeStats.memory > 80 ? 'text-red-500' :
-                    realTimeStats.memory > 60 ? 'text-yellow-500' : 'text-blue-500'
-                    }`}>
-                    {realTimeStats.memory.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                  <div
-                    className={`h-3 rounded-full transition-all duration-500 ${realTimeStats.memory > 80 ? 'bg-red-500' :
-                      realTimeStats.memory > 60 ? 'bg-yellow-500' : 'bg-blue-500'
-                      }`}
-                    style={{ width: `${realTimeStats.memory}%` }}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-20 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Disk Usage */}
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>Disk Usage</span>
-                  <span className={`font-mono ${realTimeStats.disk > 80 ? 'text-red-500' :
-                    realTimeStats.disk > 60 ? 'text-yellow-500' : 'text-purple-500'
-                    }`}>
-                    {realTimeStats.disk.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                  <div
-                    className={`h-3 rounded-full transition-all duration-500 ${realTimeStats.disk > 80 ? 'bg-red-500' :
-                      realTimeStats.disk > 60 ? 'bg-yellow-500' : 'bg-purple-500'
-                      }`}
-                    style={{ width: `${realTimeStats.disk}%` }}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-20 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mini Chart */}
-          <div className="space-y-4">
-            <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Usage Trends (Last 40s)</h4>
-            <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} h-48 relative`}>
-              <svg className="w-full h-full" viewBox="0 0 400 160">
-                {/* Grid lines */}
-                <defs>
-                  <pattern id="grid" width="20" height="16" patternUnits="userSpaceOnUse">
-                    <path d="M 20 0 L 0 0 0 16" fill="none" stroke={isDark ? '#374151' : '#e5e7eb'} strokeWidth="0.5" />
-                  </pattern>
-                </defs>
-                <rect width="400" height="160" fill="url(#grid)" />
-
-                {/* CPU Line */}
-                {statsHistory.cpu.length > 1 && (
-                  <polyline
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="2"
-                    points={statsHistory.cpu.map((value, index) =>
-                      `${(index / (statsHistory.cpu.length - 1)) * 380 + 10},${160 - (value / 100) * 140 - 10}`
-                    ).join(' ')}
-                  />
-                )}
-
-                {/* Memory Line */}
-                {statsHistory.memory.length > 1 && (
-                  <polyline
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="2"
-                    points={statsHistory.memory.map((value, index) =>
-                      `${(index / (statsHistory.memory.length - 1)) * 380 + 10},${160 - (value / 100) * 140 - 10}`
-                    ).join(' ')}
-                  />
-                )}
-
-                {/* Disk Line */}
-                {statsHistory.disk.length > 1 && (
-                  <polyline
-                    fill="none"
-                    stroke="#8b5cf6"
-                    strokeWidth="2"
-                    points={statsHistory.disk.map((value, index) =>
-                      `${(index / (statsHistory.disk.length - 1)) * 380 + 10},${160 - (value / 100) * 140 - 10}`
-                    ).join(' ')}
-                  />
-                )}
-              </svg>
-
-              {/* Legend */}
-              <div className="absolute bottom-2 left-2 flex space-x-4 text-xs">
-                <div className="flex items-center space-x-1">
-                  <div className="w-3 h-0.5 bg-green-500"></div>
-                  <span className={isDark ? 'text-gray-300' : 'text-gray-600'}>CPU</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className="w-3 h-0.5 bg-blue-500"></div>
-                  <span className={isDark ? 'text-gray-300' : 'text-gray-600'}>Memory</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <div className="w-3 h-0.5 bg-purple-500"></div>
-                  <span className={isDark ? 'text-gray-300' : 'text-gray-600'}>Disk</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   const renderSecurity = () => (
     <div className="space-y-6">
-      {/* Security Settings */}
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
           Security & Configuration
         </h3>
-
-        {/* Security Section */}
-        <div className="mb-8">
-          <h4 className={`text-md font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-            🔒 Security Settings
-          </h4>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>JWT Session Timeout</div>
-                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Token expiry time (affects all users)</div>
-              </div>
+        <div className="space-y-4">
+          <div>
+            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+              JWT Session Timeout
+            </label>
+            <div className="flex flex-col sm:flex-row gap-3">
               <select
                 value={jwtSessionTimeout}
-                onChange={(e) => updateJwtTimeout(parseInt(e.target.value))}
-                className={`px-3 py-2 border rounded text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                onChange={(e) => setJwtSessionTimeout(parseInt(e.target.value, 10))}
+                className={`w-full sm:w-72 p-3 border rounded-lg ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
               >
-                {availableTimeouts.map(timeout => (
+                {availableTimeouts.map((timeout) => (
                   <option key={timeout} value={timeout}>
-                    {timeout < 60 ? `${timeout} minutes` : `${timeout / 60} hour${timeout > 60 ? 's' : ''}`}
+                    {timeout} minutes
                   </option>
                 ))}
               </select>
+              <button
+                onClick={() => updateJwtTimeout(jwtSessionTimeout)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Update Timeout
+              </button>
             </div>
           </div>
+          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+            Changes apply to new sessions and help enforce consistent admin session security.
+          </p>
         </div>
       </div>
 
-      {/* System Information */}
       <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
         <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
           System Information
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+            <div className="text-sm font-medium text-gray-600">Environment</div>
+            <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {systemStats.system_info.environment}
+            </div>
+          </div>
+          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+            <div className="text-sm font-medium text-gray-600">Operating System</div>
+            <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {systemStats.system_info.os_info}
+            </div>
+          </div>
           <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
             <div className="text-sm font-medium text-gray-600">Django Version</div>
             <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -1613,183 +1242,7 @@ const SystemManagement = () => {
               {systemStats.system_info.python_version}
             </div>
           </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-sm font-medium text-gray-600">Database</div>
-            <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {systemStats.system_info.database.vendor} {systemStats.system_info.database.version}
-            </div>
-          </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-sm font-medium text-gray-600">Operating System</div>
-            <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {systemStats.system_info.os_info}
-            </div>
-          </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-sm font-medium text-gray-600">Environment</div>
-            <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {systemStats.system_info.environment}
-            </div>
-          </div>
-          <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className="text-sm font-medium text-gray-600">System Uptime</div>
-            <div className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              {systemStats.system_info.uptime}
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
-  );
-
-  const renderMonitoring = () => (
-    <div className="space-y-6">
-      {/* Performance Overview */}
-      <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} p-6 rounded-lg shadow`}>
-        {!statsAvailable && statsError ? (
-          // No data available state
-          <div className={`p-8 rounded-lg text-center ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-            <div className={`text-5xl mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>⚠️</div>
-            <h4 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-              No Data Available
-            </h4>
-            <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>
-              {statsError}
-            </p>
-            <button
-              onClick={updateRealTimeStats}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              🔄 Try Again
-            </button>
-          </div>
-        ) : (
-          // Normal data display
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Real-time Gauges */}
-            <div className="space-y-6">
-              <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>System Resources</h4>
-
-
-
-
-
-
-              {/* CPU Gauge */}
-              <div className="relative">
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>CPU Usage</span>
-                  <span className={`text-lg font-bold ${realTimeStats.cpu > 80 ? 'text-red-500' :
-                    realTimeStats.cpu > 60 ? 'text-yellow-500' : 'text-green-500'
-                    }`}>
-                    {realTimeStats.cpu.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${realTimeStats.cpu > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' :
-                      realTimeStats.cpu > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                        'bg-gradient-to-r from-green-400 to-green-600'
-                      }`}
-                    style={{ width: `${realTimeStats.cpu}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Memory Gauge */}
-              <div className="relative">
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Memory Usage</span>
-                  <span className={`text-lg font-bold ${realTimeStats.memory > 80 ? 'text-red-500' :
-                    realTimeStats.memory > 60 ? 'text-yellow-500' : 'text-blue-500'
-                    }`}>
-                    {realTimeStats.memory.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${realTimeStats.memory > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' :
-                      realTimeStats.memory > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                        'bg-gradient-to-r from-blue-400 to-blue-600'
-                      }`}
-                    style={{ width: `${realTimeStats.memory}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Disk Gauge */}
-              <div className="relative">
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Disk Usage</span>
-                  <span className={`text-lg font-bold ${realTimeStats.disk > 80 ? 'text-red-500' :
-                    realTimeStats.disk > 60 ? 'text-yellow-500' : 'text-purple-500'
-                    }`}>
-                    {realTimeStats.disk.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ${realTimeStats.disk > 80 ? 'bg-gradient-to-r from-red-400 to-red-600' :
-                      realTimeStats.disk > 60 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                        'bg-gradient-to-r from-purple-400 to-purple-600'
-                      }`}
-                    style={{ width: `${realTimeStats.disk}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Live Stats Cards */}
-            <div className="space-y-4">
-              <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Live System Statistics</h4>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
-                  <div className="text-2xl font-bold text-blue-500 animate-pulse">{realTimeStats.activeSessions}</div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Processes</div>
-                  <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                    System Load
-                  </div>
-                </div>
-
-                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
-                  <div className="text-2xl font-bold text-green-500">{realTimeStats.responseTime.toFixed(2)}s</div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Response Time</div>
-                  <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                    API Performance
-                  </div>
-                </div>
-
-                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
-                  <div className="text-2xl font-bold text-orange-500">{realTimeStats.network.toFixed(1)}</div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Network MB/s</div>
-                  <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                    Data Transfer
-                  </div>
-                </div>
-
-                <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'} text-center cursor-pointer hover:shadow-lg transition-shadow`} onClick={handleOpenActiveSessions}>
-                  <div className="text-2xl font-bold text-purple-500">{systemStats.django.active_users || 0}</div>
-                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Users</div>
-                  <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>
-                    Current Sessions
-                  </div>
-                </div>
-              </div>
-
-              {/* Auto-refresh Info */}
-              <div className={`mt-4 p-3 rounded-lg text-xs ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-blue-50 text-blue-700'}`}>
-                🔄 Auto-refreshing every 9 seconds | Powered by real system metrics
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1798,8 +1251,6 @@ const SystemManagement = () => {
     switch (activeSystemTab) {
       case 'overview':
         return renderSystemOverview();
-      case 'performance':
-        return renderPerformance();
       case 'maintenance':
         return renderMaintenance();
       case 'backup':
@@ -1808,8 +1259,6 @@ const SystemManagement = () => {
         return renderSystemLogs();
       case 'security':
         return renderSecurity();
-      case 'monitoring':
-        return renderMonitoring();
       default:
         return renderMaintenance();
     }
@@ -1840,146 +1289,6 @@ const SystemManagement = () => {
 
       {/* Tab Content */}
       {renderTabContent()}
-
-      {/* Active Sessions Modal */}
-      {showActiveSessionsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto`}>
-            <div className={`p-6 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center sticky top-0 ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
-              <div>
-                <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  🔴 Live User Sessions
-                </h2>
-                {lastRefresh && (
-                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>
-                    Last updated: {lastRefresh.toLocaleTimeString()}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={loadActiveSessions}
-                  disabled={sessionsLoading}
-                  className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-600'} ${sessionsLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title="Refresh sessions"
-                >
-                  {sessionsLoading ? '⟳' : '🔄'}
-                </button>
-                <button
-                  onClick={() => setShowActiveSessionsModal(false)}
-                  className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6">
-              {sessionsError && (
-                <div className={`p-4 rounded-lg mb-4 ${isDark ? 'bg-red-900/30 border border-red-700' : 'bg-red-100 border border-red-400'}`}>
-                  <p className={`${isDark ? 'text-red-300' : 'text-red-800'}`}>
-                    ⚠️ {sessionsError}
-                  </p>
-                </div>
-              )}
-              {sessionsLoading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-4 h-4 bg-blue-500 rounded-full animate-pulse"></div>
-                    <div className={`text-lg ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Loading live sessions...
-                    </div>
-                  </div>
-                </div>
-              ) : activeSessions.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-4xl mb-4">📭</div>
-                  <h3 className={`text-lg font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-                    No Active Sessions
-                  </h3>
-                  <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    There are no active user sessions at the moment. Make sure you're logged in as an admin account.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                      <tr>
-                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                          User
-                        </th>
-                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                          Email
-                        </th>
-                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                          IP Address
-                        </th>
-                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                          Role
-                        </th>
-                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                          Last Activity
-                        </th>
-                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                          Activity
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className={`${isDark ? 'bg-gray-800' : 'bg-white'} divide-y divide-gray-200`}>
-                      {activeSessions.map((session, index) => (
-                        <tr key={index} className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                              {session.first_name} {session.last_name}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                              {session.email}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm font-mono px-3 py-1 rounded inline ${isDark ? 'bg-gray-700 text-green-400' : 'bg-gray-100 text-green-600'}`}>
-                              {session.ip_address}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${session.role === 'admin' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
-                              session.role === 'officer' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                                'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                              }`}>
-                              {session.role?.toUpperCase() || 'USER'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                              {new Date(session.last_activity).toLocaleString()}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                              <span className="font-mono">{session.method}</span> {session.path}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className={`mt-4 p-4 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                      Total Active Sessions: <strong>{activeSessions.length}</strong>
-                    </p>
-                    <p className={`text-xs mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Data is based on user activity in the last 24 hours. Sessions automatically appear when users log in or make API requests. Auto-refreshing every 100 seconds.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
