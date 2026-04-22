@@ -7,7 +7,6 @@ from .models import (
     EmailVerificationToken,
     Officer,
     PasswordResetToken,
-    Program,
     Student,
     StudentType,
     SystemLog,
@@ -18,7 +17,6 @@ admin.site.register(SystemLog)
 admin.site.register(Campus)
 admin.site.register(College)
 admin.site.register(Department)
-admin.site.register(Program)
 admin.site.register(Student)
 admin.site.register(Officer)
 admin.site.register(StudentType)

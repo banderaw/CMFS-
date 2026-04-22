@@ -104,6 +104,31 @@ class ComplaintSecurityAPITests(APITestCase):
         cc_emails = list(created.cc_list.values_list('email', flat=True))
         self.assertIn(self.officer_one.email, cc_emails)
 
+    def test_admin_can_bulk_assign_multiple_officers_to_category(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.post(
+            reverse('resolver-assignment-bulk-create'),
+            {
+                'category': self.category.pk,
+                'level': self.resolver_level.pk,
+                'escalation_time': '1 00:00:00',
+                'active': True,
+                'officer_ids': [self.officer_one.id, self.officer_two.id],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['count'], 2)
+
+        assignments = CategoryResolver.objects.filter(
+            category=self.category,
+            level=self.resolver_level,
+            officer__in=[self.officer_one, self.officer_two],
+        )
+        self.assertEqual(assignments.count(), 2)
+
     def test_complaint_list_scoping_for_admin_officer_user_and_cc(self):
         self.client.force_authenticate(user=self.admin)
         admin_response = self.client.get(reverse('complaint-list'))
@@ -199,3 +224,33 @@ class ComplaintSecurityAPITests(APITestCase):
         self.assertEqual(comment_create.status_code, 201)
         created_comment = Comment.objects.get(pk=comment_create.data['id'])
         self.assertEqual(created_comment.author, self.user_one)
+
+    def test_admin_can_reassign_complaint_without_current_level(self):
+        CategoryResolver.objects.create(
+            category=self.category,
+            level=self.resolver_level,
+            officer=self.officer_two,
+            escalation_time=timedelta(hours=1),
+        )
+        complaint = Complaint.objects.create(
+            submitted_by=self.user_two,
+            category=self.category,
+            title='Unrouted complaint',
+            description='Complaint without a current level',
+            assigned_officer=self.officer_one,
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            reverse('complaint-reassign', args=[complaint.pk]),
+            {
+                'officer_id': self.officer_two.id,
+                'reason': 'Escalated',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        complaint.refresh_from_db()
+        self.assertEqual(complaint.assigned_officer, self.officer_two)
+        self.assertEqual(complaint.current_level, self.resolver_level)

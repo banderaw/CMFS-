@@ -186,16 +186,6 @@ class Department(models.Model):
 
     def __str__(self):
         return self.department_name or ''
-
-
-class Program(models.Model):
-    program_name       = models.CharField(max_length=100, null=True, blank=True)
-    description        = models.TextField(blank=True, null=True)
-    is_active          = models.BooleanField(default=True)
-    created_at         = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return self.program_name or ''
 class User(AbstractBaseUser, PermissionsMixin):
     ROLE_USER = 'user'  # Student
     ROLE_OFFICER = 'officer'  # Resolver
@@ -452,19 +442,9 @@ class User(AbstractBaseUser, PermissionsMixin):
         return officer_profile.employee_id if officer_profile else None
 
     @property
-    def student_id(self):
-        student_profile = getattr(self, 'student_profile', None)
-        return student_profile.student_id if student_profile else None
-
-    @property
     def student_type(self):
         student_profile = getattr(self, 'student_profile', None)
         return student_profile.student_type_id if student_profile else None
-
-    @property
-    def program(self):
-        student_profile = getattr(self, 'student_profile', None)
-        return student_profile.program_id if student_profile else None
 
     @property
     def year_of_study(self):
@@ -502,19 +482,15 @@ class Student(models.Model):
         on_delete=models.CASCADE,
         related_name='student_profile'
     )
-    student_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
     student_type = models.ForeignKey(StudentType, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     campus_id = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
-    program = models.ForeignKey(Program, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     year_of_study = models.PositiveIntegerField(null=True, blank=True)
     
     class Meta:
         ordering = ['user__first_name', 'user__last_name']
         indexes = [
-            models.Index(fields=['student_id']),
             models.Index(fields=['department']),
-            models.Index(fields=['program']),
         ]
 
     def clean(self):
@@ -533,7 +509,7 @@ class Student(models.Model):
         return super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.user.full_name} ({self.student_id})"
+        return self.user.full_name
 
 class Officer(models.Model):
     user = models.OneToOneField(

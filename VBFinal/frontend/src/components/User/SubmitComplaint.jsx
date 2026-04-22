@@ -152,9 +152,21 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleCcOfficeChange = (event) => {
-    const selectedOfficeIds = Array.from(event.target.selectedOptions).map((option) => option.value);
-    setCcOfficeIds(selectedOfficeIds);
+  const toggleCcOfficeSelection = (officeId) => {
+    setCcOfficeIds((prev) => {
+      const id = String(officeId);
+      return prev.includes(id)
+        ? prev.filter((item) => item !== id)
+        : [...prev, id];
+    });
+  };
+
+  const selectAllCcOffices = () => {
+    setCcOfficeIds(ccOfficeOptions.map((office) => String(office.value)));
+  };
+
+  const clearCcOffices = () => {
+    setCcOfficeIds([]);
   };
 
   const submitComplaint = async (e) => {
@@ -375,22 +387,63 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
                   <label className={`block text-sm font-semibold ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
                     {language === 'am' ? 'CC የቢሮ አማራጮች ይምረጡ' : 'CC Backend Offices (Select one or more)'}
                   </label>
-                  <select
-                    multiple
-                    value={ccOfficeIds}
-                    onChange={handleCcOfficeChange}
-                    className={`w-full border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors min-h-40 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                  >
-                    {ccOfficeOptions.length === 0 ? (
-                      <option value="">{language === 'am' ? 'ቢሮዎች አልተገኙም' : 'No backend offices found'}</option>
-                    ) : (
-                      ccOfficeOptions.map((office) => (
-                        <option key={office.value} value={office.value}>
-                          {office.label}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                  {ccOfficeOptions.length === 0 ? (
+                    <div className={`w-full border rounded-lg px-4 py-3 text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-white border-gray-300 text-gray-600'}`}>
+                      {language === 'am' ? 'ቢሮዎች አልተገኙም' : 'No backend offices found'}
+                    </div>
+                  ) : (
+                    <div className={`border rounded-lg p-3 ${isDark ? 'border-gray-600 bg-gray-800' : 'border-gray-300 bg-white'}`}>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {language === 'am'
+                            ? 'ብዙ ቢሮዎችን ለመምረጥ ምልክት ያድርጉ'
+                            : 'Choose multiple offices to receive CC notifications'}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={selectAllCcOffices}
+                            className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                          >
+                            {language === 'am' ? 'ሁሉንም ይምረጡ' : 'Select all'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearCcOffices}
+                            className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                          >
+                            {language === 'am' ? 'አጽዳ' : 'Clear'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-52 overflow-y-auto space-y-2">
+                        {ccOfficeOptions.map((office) => {
+                          const officeId = String(office.value);
+                          const selected = ccOfficeIds.includes(officeId);
+                          return (
+                            <button
+                              key={office.value}
+                              type="button"
+                              onClick={() => toggleCcOfficeSelection(officeId)}
+                              className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${selected
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                : isDark
+                                  ? 'border-gray-600 bg-gray-700 hover:border-blue-400'
+                                  : 'border-gray-200 bg-white hover:border-blue-300'} `}
+                            >
+                              <span className="flex items-center justify-between gap-3">
+                                <span className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{office.label}</span>
+                                <span className={`h-5 w-5 rounded-full border flex items-center justify-center ${selected ? 'bg-blue-600 border-blue-600 text-white' : isDark ? 'border-gray-500 text-transparent' : 'border-gray-300 text-transparent'}`}>
+                                  ✓
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                     {language === 'am'
                       ? `የተመረጡ ቢሮዎች: ${ccOfficeIds.length}`
@@ -492,6 +545,16 @@ const SubmitComplaint = ({ setSubmitSuccess }) => {
                     </p>
                     <p><span className="font-semibold">{language === 'am' ? 'ማንነት ሁኔታ' : 'Identity'}:</span> {complaintForm.isAnonymous ? (language === 'am' ? 'ስውር' : 'Anonymous') : (language === 'am' ? 'ተገልጿል' : 'Visible')}</p>
                     <p><span className="font-semibold">{language === 'am' ? 'CC ቢሮዎች' : 'CC Backend Offices'}:</span> {ccOfficeIds.length}</p>
+                    {selectedCcOffices.length > 0 && (
+                      <div>
+                        <p className="font-semibold mb-1">{language === 'am' ? 'የተመረጡ ቢሮዎች ዝርዝር' : 'Selected office list'}:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {selectedCcOffices.map((office) => (
+                            <li key={office.value}>{office.label}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <p><span className="font-semibold">{language === 'am' ? 'ፋይሎች' : 'Attachments'}:</span> {files.length}</p>
                   </div>
                 </div>

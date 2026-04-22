@@ -14,6 +14,18 @@ import os
 User = get_user_model()
 
 
+def _build_microsoft_redirect_uri(request):
+    explicit_redirect_uri = os.getenv('MICROSOFT_REDIRECT_URI', '').strip()
+    if explicit_redirect_uri:
+        return explicit_redirect_uri
+
+    backend_url = os.getenv('BACKEND_URL', '').strip()
+    if backend_url:
+        return f"{backend_url.rstrip('/')}/api/accounts/microsoft/callback/"
+
+    return request.build_absolute_uri('/api/accounts/microsoft/callback/')
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def microsoft_config_test(request):
@@ -36,12 +48,7 @@ def microsoft_login(request):
     client_id = os.getenv('MICROSOFT_CLIENT_ID', '')
     tenant_id = os.getenv('MICROSOFT_TENANT_ID', 'common')
     
-    # Use BACKEND_URL from env if available, otherwise build absolute URI
-    backend_url = os.getenv('BACKEND_URL')
-    if backend_url:
-        redirect_uri = f"{backend_url}/api/accounts/microsoft/callback/"
-    else:
-        redirect_uri = request.build_absolute_uri('/api/accounts/microsoft/callback/')
+    redirect_uri = _build_microsoft_redirect_uri(request)
     
     # Debug: Check if client_id is loaded
     if not client_id:
@@ -86,12 +93,7 @@ def microsoft_callback(request):
         client_secret = os.getenv('MICROSOFT_CLIENT_SECRET', '')
         tenant_id = os.getenv('MICROSOFT_TENANT_ID', 'common')
         
-        # Use BACKEND_URL from env if available, otherwise build absolute URI
-        backend_url = os.getenv('BACKEND_URL')
-        if backend_url:
-            redirect_uri = f"{backend_url}/api/accounts/microsoft/callback/"
-        else:
-            redirect_uri = request.build_absolute_uri('/api/accounts/microsoft/callback/')
+        redirect_uri = _build_microsoft_redirect_uri(request)
         
         token_url = f'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
         token_data = {

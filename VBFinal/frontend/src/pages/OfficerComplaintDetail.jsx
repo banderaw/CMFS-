@@ -140,6 +140,14 @@ const OfficerComplaintDetail = () => {
     }
   };
 
+  const handleOpenAttachment = async (file) => {
+    try {
+      await apiService.openAuthenticatedFile(file.url, file.filename);
+    } catch (err) {
+      window.alert(err.message || 'Failed to open attachment');
+    }
+  };
+
   if (loading) {
     return <div className="p-6">Loading complaint details...</div>;
   }
@@ -165,7 +173,7 @@ const OfficerComplaintDetail = () => {
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      <DashboardNavbar onSidebarToggle={handleSidebarToggle} />
+      <DashboardNavbar onSidebarToggle={handleSidebarToggle} showOfficerNotifications />
 
       <div className="flex pt-20">
         <Sidebar
@@ -278,16 +286,15 @@ const OfficerComplaintDetail = () => {
                 <h3 className="text-lg font-semibold">Attachments</h3>
                 <div className="space-y-2">
                   {attachments.map((file) => (
-                    <a
+                    <button
                       key={file.id}
-                      href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      type="button"
+                      onClick={() => handleOpenAttachment(file)}
                       className="flex items-center justify-between p-3 rounded border border-gray-200 hover:bg-gray-50"
                     >
                       <span className="text-sm text-gray-700">{getFileIcon(file.content_type, file.filename)} - {file.filename}</span>
                       <span className="text-xs text-gray-500">Open</span>
-                    </a>
+                    </button>
                   ))}
                 </div>
               </section>

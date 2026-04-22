@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import PublicNavbar from '../components/UI/PublicNavbar';
-import PublicFooter from '../components/UI/PublicFooter';
 import apiService from '../services/api';
 import authService from '../services/auth';
 
@@ -23,14 +21,12 @@ const RegisterComplete = () => {
     first_name: firstName,
     last_name: lastName,
     gmail_account: '',
-    student_id: '',
     student_type: '',
     campus_id: '',
     phone: '',
     user_campus: '',
     college: '',
     department: '',
-    program: '',
     year_of_study: '',
     password: '',
     confirm_password: '',
@@ -38,9 +34,9 @@ const RegisterComplete = () => {
 
   const [campuses, setCampuses] = useState([]);
   const [studentTypes, setStudentTypes] = useState([]);
+  const [studentTypeLoading, setStudentTypeLoading] = useState(false);
   const [colleges, setColleges] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [programs, setPrograms] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,16 +49,31 @@ const RegisterComplete = () => {
 
     Promise.all([
       apiService.getCampuses(),
-      apiService.getStudentTypes(),
-      apiService.getPrograms(),
     ])
-      .then(([campusesData, studentTypesData, programsData]) => {
+      .then(([campusesData]) => {
         setCampuses(campusesData.results || campusesData || []);
-        setStudentTypes(studentTypesData.results || studentTypesData || []);
-        setPrograms(programsData.results || programsData || []);
       })
       .catch(() => { });
   }, [accessToken, refreshToken]);
+
+  useEffect(() => {
+    const loadStudentTypes = async () => {
+      setStudentTypeLoading(true);
+      try {
+        const response = await apiService.getStudentTypes();
+        const resolvedStudentTypes = (response.results || response || [])
+          .filter((item) => item && item.is_active !== false)
+          .sort((a, b) => (a.type_name || '').localeCompare(b.type_name || ''));
+        setStudentTypes(resolvedStudentTypes);
+      } catch {
+        setStudentTypes([]);
+      } finally {
+        setStudentTypeLoading(false);
+      }
+    };
+
+    loadStudentTypes();
+  }, []);
 
   useEffect(() => {
     if (!formData.user_campus) {
@@ -130,9 +141,7 @@ const RegisterComplete = () => {
       };
 
       if (formData.department) payload.department = formData.department;
-      if (formData.student_id?.trim()) payload.student_id = formData.student_id.trim();
       if (formData.student_type) payload.student_type = formData.student_type;
-      if (formData.program) payload.program = formData.program;
       if (formData.year_of_study) payload.year_of_study = parseInt(formData.year_of_study, 10);
       if (formData.phone?.trim()) payload.phone = formData.phone;
       if (formData.gmail_account?.trim()) payload.gmail_account = formData.gmail_account.trim().toLowerCase();
@@ -184,8 +193,6 @@ const RegisterComplete = () => {
 
   return (
     <div className={`min-h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      <PublicNavbar />
-
       <div className="flex-1 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">
           <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} p-8 rounded-2xl shadow-2xl border`}>
@@ -227,22 +234,16 @@ const RegisterComplete = () => {
                 <p className={`mt-1 text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Authenticated via Microsoft</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className={labelCls}>Student ID</label>
-                  <input type="text" name="student_id" value={formData.student_id} onChange={handleChange} placeholder="UGR/..../.." className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Campus ID *</label>
-                  <input type="text" name="campus_id" required value={formData.campus_id} onChange={handleChange} placeholder="UoG/..." className={inputCls} />
-                </div>
+              <div>
+                <label className={labelCls}>Campus ID *</label>
+                <input type="text" name="campus_id" required value={formData.campus_id} onChange={handleChange} placeholder="UoG/..." className={inputCls} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className={labelCls}>Student Type</label>
                   <select name="student_type" value={formData.student_type} onChange={handleChange} className={inputCls}>
-                    <option value="">Select student type</option>
+                    <option value="">{studentTypeLoading ? 'Loading student types...' : 'Select student type'}</option>
                     {studentTypes.map((type) => (
                       <option key={type.id} value={type.id}>{type.type_name}</option>
                     ))}
@@ -296,20 +297,9 @@ const RegisterComplete = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className={labelCls}>Program</label>
-                  <select name="program" value={formData.program} onChange={handleChange} className={inputCls}>
-                    <option value="">Select your program</option>
-                    {programs.map((program) => (
-                      <option key={program.id} value={program.id}>{program.program_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Year of Study</label>
-                  <input type="number" min="1" name="year_of_study" value={formData.year_of_study} onChange={handleChange} placeholder="e.g. 1" className={inputCls} />
-                </div>
+              <div>
+                <label className={labelCls}>Year of Study</label>
+                <input type="number" min="1" name="year_of_study" value={formData.year_of_study} onChange={handleChange} placeholder="e.g. 1" className={inputCls} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -345,8 +335,6 @@ const RegisterComplete = () => {
           </div>
         </div>
       </div>
-
-      <PublicFooter />
     </div>
   );
 };

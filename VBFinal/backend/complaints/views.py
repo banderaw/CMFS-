@@ -1,6 +1,7 @@
-from django.db import models
+from django.db import models, transaction
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_duration
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -137,6 +138,88 @@ class CategoryResolverViewSet(AuthenticatedReadAdminWriteMixin, viewsets.ModelVi
         'id',
     )
     serializer_class = CategoryResolverSerializer
+
+    @action(detail=False, methods=['post'], url_path='bulk-create')
+    def bulk_create(self, request):
+        payload = request.data or {}
+        category_id = payload.get('category')
+        level_id = payload.get('level')
+        escalation_time = payload.get('escalation_time')
+        active = payload.get('active', True)
+        officer_ids = payload.get('officer_ids')
+
+        if not category_id or not level_id or escalation_time is None:
+            return DRFResponse(
+                {'error': 'category, level, and escalation_time are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(officer_ids, list) or not officer_ids:
+            return DRFResponse(
+                {'error': 'officer_ids must be a non-empty array.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        parsed_escalation_time = parse_duration(str(escalation_time))
+        if parsed_escalation_time is None:
+            return DRFResponse(
+                {'error': 'Invalid escalation_time format. Use Django duration format.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        normalized_ids = []
+        for officer_id in officer_ids:
+            try:
+                normalized_ids.append(int(officer_id))
+            except (TypeError, ValueError):
+                return DRFResponse(
+                    {'error': f'Invalid officer id: {officer_id}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        unique_officer_ids = list(dict.fromkeys(normalized_ids))
+        valid_officer_ids = set(
+            User.objects.filter(
+                id__in=unique_officer_ids,
+            ).filter(
+                models.Q(role=User.ROLE_OFFICER) | models.Q(is_staff=True)
+            ).values_list('id', flat=True)
+        )
+        invalid_ids = [officer_id for officer_id in unique_officer_ids if officer_id not in valid_officer_ids]
+        if invalid_ids:
+            return DRFResponse(
+                {'error': f'Invalid officer_ids: {invalid_ids}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assignments = []
+        try:
+            with transaction.atomic():
+                for officer_id in unique_officer_ids:
+                    resolver, _ = CategoryResolver.objects.update_or_create(
+                        category_id=category_id,
+                        level_id=level_id,
+                        officer_id=officer_id,
+                        defaults={
+                            'escalation_time': parsed_escalation_time,
+                            'active': active,
+                        },
+                    )
+                    assignments.append(resolver)
+        except Exception as exc:
+            return DRFResponse(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(assignments, many=True)
+        return DRFResponse(
+            {
+                'count': len(assignments),
+                'results': serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ComplaintViewSet(viewsets.ModelViewSet):
@@ -286,15 +369,41 @@ class ComplaintViewSet(viewsets.ModelViewSet):
             return DRFResponse({'error': 'You do not have permission to reassign this complaint.'}, status=status.HTTP_403_FORBIDDEN)
 
         new_officer_id = request.data.get('officer_id')
+        requested_level_id = request.data.get('level_id')
         reason = request.data.get('reason', 'manual reassignment')
         if not new_officer_id:
             return DRFResponse({'error': 'officer_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        level = complaint.current_level
-        if level is None:
-            return DRFResponse({'error': 'Complaint does not have a resolver level yet.'}, status=status.HTTP_400_BAD_REQUEST)
-
         officer = get_object_or_404(User, id=new_officer_id, role='officer')
+
+        level = None
+        if requested_level_id:
+            level = ResolverLevel.objects.filter(id=requested_level_id).first()
+
+        if level is None and complaint.category_id:
+            level = CategoryResolver.objects.filter(
+                category=complaint.category,
+                officer=officer,
+                active=True,
+            ).select_related('level').order_by('level__level_order', 'id').first()
+            level = level.level if level else None
+
+        if level is None and complaint.category_id:
+            level = CategoryResolver.objects.filter(
+                category=complaint.category,
+                active=True,
+            ).select_related('level').order_by('level__level_order', 'id').first()
+            level = level.level if level else None
+
+        if level is None:
+            level = complaint.current_level
+
+        if level is None:
+            return DRFResponse(
+                {'error': 'Unable to determine a resolver level for this complaint. Assign a category first or include a level.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         Assignment.objects.create(
             complaint=complaint,
             officer=officer,

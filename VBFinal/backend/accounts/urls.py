@@ -5,7 +5,6 @@ from .views import (
 	DepartmentViewSet,
 	MicrosoftAuthViewSet,
 	OfficerViewSet,
-	ProgramViewSet,
 	StudentTypeViewSet,
 	StudentViewSet,
 	SystemLogViewSet,
@@ -21,7 +20,6 @@ router.register(r'accounts/microsoft', MicrosoftAuthViewSet, basename='microsoft
 router.register(r'campuses', CampusViewSet, basename='campuses')
 router.register(r'colleges', CollegeViewSet, basename='colleges')
 router.register(r'departments', DepartmentViewSet, basename='departments')
-router.register(r'programs', ProgramViewSet, basename='programs')
 router.register(r'student-types', StudentTypeViewSet, basename='student-types')
 router.register(r'students', StudentViewSet, basename='students')
 router.register(r'officers', OfficerViewSet, basename='officers')

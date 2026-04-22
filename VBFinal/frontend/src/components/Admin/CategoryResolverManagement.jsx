@@ -37,11 +37,12 @@ const CategoryResolverManagement = () => {
     category: '',
     level: '',
     officer: '',
+    officer_ids: [],
     escalation_time: '2 00:00:00',
     active: true
   });
 
-  const resetForm = () => setFormData({ category: '', level: '', officer: '', escalation_time: '2 00:00:00', active: true });
+  const resetForm = () => setFormData({ category: '', level: '', officer: '', officer_ids: [], escalation_time: '2 00:00:00', active: true });
 
   const openHomePage = () => setPageMode('home');
   const openViewPage = () => setPageMode('view');
@@ -148,7 +149,21 @@ const CategoryResolverManagement = () => {
       if (editingResolver) {
         await apiService.updateCategoryResolver(editingResolver.id, formData);
       } else {
-        await apiService.createCategoryResolver(formData);
+        const selectedOfficerIds = formData.officer_ids?.length
+          ? formData.officer_ids
+          : (formData.officer ? [formData.officer] : []);
+
+        if (!selectedOfficerIds.length) {
+          throw new Error('Please select at least one officer.');
+        }
+
+        await apiService.createCategoryResolverBulk({
+          category: formData.category,
+          level: formData.level,
+          escalation_time: formData.escalation_time,
+          active: formData.active,
+          officer_ids: selectedOfficerIds,
+        });
       }
       setEditingResolver(null);
       resetForm();
@@ -165,10 +180,26 @@ const CategoryResolverManagement = () => {
       category: resolver.category,
       level: resolver.level,
       officer: resolver.officer,
+      officer_ids: [String(resolver.officer)],
       escalation_time: resolver.escalation_time || '2 00:00:00',
       active: resolver.active
     });
     setPageMode('edit');
+  };
+
+  const officerOptions = users.filter(user => user.role === 'officer' || user.is_staff);
+
+  const toggleOfficerSelection = (officerId) => {
+    setFormData((prev) => {
+      const id = String(officerId);
+      const exists = prev.officer_ids.includes(id);
+      return {
+        ...prev,
+        officer_ids: exists
+          ? prev.officer_ids.filter((item) => item !== id)
+          : [...prev.officer_ids, id],
+      };
+    });
   };
 
   const handleDelete = async (id) => {
@@ -225,7 +256,7 @@ const CategoryResolverManagement = () => {
                 >
                   <option value="all">All Categories</option>
                   {categories.map(cat => (
-                    <option key={cat.id || cat.category_id} value={cat.id || cat.category_id}>{cat.name}</option>
+                    <option key={cat.id || cat.category_id} value={cat.id || cat.category_id}>{cat.name || cat.office_name}</option>
                   ))}
                 </select>
               </div>
@@ -402,7 +433,7 @@ const CategoryResolverManagement = () => {
                 >
                   <option value="">Select Category</option>
                   {categories.map((cat) => (
-                    <option key={cat.id || cat.category_id} value={cat.id || cat.category_id}>{cat.name}</option>
+                    <option key={cat.id || cat.category_id} value={cat.id || cat.category_id}>{cat.name || cat.office_name}</option>
                   ))}
                 </select>
               </div>
@@ -425,20 +456,53 @@ const CategoryResolverManagement = () => {
               </div>
 
               <div>
-                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Officer</label>
-                <select
-                  value={formData.officer}
-                  onChange={(e) => setFormData({ ...formData, officer: e.target.value })}
-                  className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                  required
-                >
-                  <option value="">Select Officer</option>
-                  {users.filter(user => user.role === 'officer' || user.is_staff).map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.first_name} {user.last_name} ({user.email})
-                    </option>
-                  ))}
-                </select>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {editingResolver ? 'Officer' : 'Officers'}
+                </label>
+                {editingResolver ? (
+                  <select
+                    value={formData.officer}
+                    onChange={(e) => setFormData({ ...formData, officer: e.target.value })}
+                    className={`mt-1 block w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                    required
+                  >
+                    <option value="">Select Officer</option>
+                    {officerOptions.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.first_name} {user.last_name} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className={`mt-2 border rounded-md max-h-56 overflow-y-auto ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-white'}`}>
+                    {officerOptions.length === 0 ? (
+                      <p className={`px-3 py-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>No officers available.</p>
+                    ) : (
+                      officerOptions.map((user) => {
+                        const officerId = String(user.id);
+                        const selected = formData.officer_ids.includes(officerId);
+                        return (
+                          <label
+                            key={user.id}
+                            className={`flex items-center gap-2 px-3 py-2 text-sm border-b last:border-b-0 cursor-pointer ${isDark ? 'border-gray-600 text-gray-200 hover:bg-gray-600' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleOfficerSelection(user.id)}
+                            />
+                            <span>{user.first_name} {user.last_name} ({user.email})</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+                {!editingResolver && (
+                  <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Selected officers: {formData.officer_ids.length}
+                  </p>
+                )}
               </div>
 
               <div>

@@ -99,6 +99,97 @@ class ApiService {
     }
   }
 
+  buildRequestUrl(endpointOrUrl) {
+    if (/^https?:\/\//i.test(endpointOrUrl)) {
+      return endpointOrUrl;
+    }
+    const normalizedPath = endpointOrUrl.startsWith('/') ? endpointOrUrl : `/${endpointOrUrl}`;
+    return `${API_BASE_URL}${normalizedPath}`;
+  }
+
+  extractFilenameFromContentDisposition(contentDisposition) {
+    if (!contentDisposition) return '';
+
+    const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match?.[1]) {
+      try {
+        return decodeURIComponent(utf8Match[1]);
+      } catch {
+        return utf8Match[1];
+      }
+    }
+
+    const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
+    if (quotedMatch?.[1]) {
+      return quotedMatch[1];
+    }
+
+    const plainMatch = contentDisposition.match(/filename=([^;]+)/i);
+    if (plainMatch?.[1]) {
+      return plainMatch[1].trim();
+    }
+
+    return '';
+  }
+
+  async requestRaw(endpointOrUrl, options = {}) {
+    const url = this.buildRequestUrl(endpointOrUrl);
+    const config = {
+      headers: this.getHeaders(Boolean(options.isFormData), options.skipAuth),
+      ...options,
+    };
+
+    if (options.removeContentType && config.headers?.['Content-Type']) {
+      delete config.headers['Content-Type'];
+    }
+
+    let response = await fetch(url, config);
+
+    if (response.status === 401 && this.token && !options.skipAuth) {
+      await this.refreshToken();
+      config.headers = this.getHeaders(Boolean(options.isFormData), false);
+      if (options.removeContentType && config.headers?.['Content-Type']) {
+        delete config.headers['Content-Type'];
+      }
+      response = await fetch(url, config);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+    }
+
+    return response;
+  }
+
+  async openAuthenticatedFile(fileUrl, fallbackFilename = 'attachment') {
+    const response = await this.requestRaw(fileUrl, { method: 'GET', removeContentType: true });
+    const blob = await response.blob();
+    const contentType = response.headers.get('content-type') || '';
+    const contentDisposition = response.headers.get('content-disposition') || '';
+    const responseFilename = this.extractFilenameFromContentDisposition(contentDisposition);
+    const filename = responseFilename || fallbackFilename;
+
+    const objectUrl = window.URL.createObjectURL(blob);
+    const openedWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+
+    if (!openedWindow) {
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      anchor.rel = 'noopener noreferrer';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+
+    window.setTimeout(() => {
+      window.URL.revokeObjectURL(objectUrl);
+    }, 60000);
+
+    return { filename, contentType };
+  }
+
   // Feedback Template Management
   async getFeedbackTemplates() {
     return this.request('/feedback/templates/');
@@ -491,12 +582,10 @@ class ApiService {
   async updateDepartment(id, data) { return this.request(`/departments/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }); }
   async deleteDepartment(id) { return this.request(`/departments/${id}/`, { method: 'DELETE' }); }
 
-  // Programs
-  async getPrograms() { return this.request('/programs/'); }
   async getStudentTypes() { return this.request('/student-types/'); }
-  async createProgram(data) { return this.request('/programs/', { method: 'POST', body: JSON.stringify(data) }); }
-  async updateProgram(id, data) { return this.request(`/programs/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }); }
-  async deleteProgram(id) { return this.request(`/programs/${id}/`, { method: 'DELETE' }); }
+  async createStudentType(data) { return this.request('/student-types/', { method: 'POST', body: JSON.stringify(data) }); }
+  async updateStudentType(id, data) { return this.request(`/student-types/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }); }
+  async deleteStudentType(id) { return this.request(`/student-types/${id}/`, { method: 'DELETE' }); }
 
   // Campuses
   async getCampuses() { return this.request('/campuses/'); }
@@ -628,6 +717,13 @@ class ApiService {
 
   async createCategoryResolver(data) {
     return this.request('/resolver-assignments/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createCategoryResolverBulk(data) {
+    return this.request('/resolver-assignments/bulk-create/', {
       method: 'POST',
       body: JSON.stringify(data),
     });

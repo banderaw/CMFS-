@@ -36,7 +36,7 @@ except ImportError:
     CHANNELS_AVAILABLE = False
 
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-BACKEND_URL = os.getenv('BACKEND_URL', 'http://127.0.0.1:8000')
+BACKEND_URL = os.getenv('BACKEND_URL', 'http://localhost:8000')
 
 default_allowed_hosts = ['localhost', '127.0.0.1']
 default_cors_origins = [FRONTEND_URL] if FRONTEND_URL else ['http://localhost:5173']

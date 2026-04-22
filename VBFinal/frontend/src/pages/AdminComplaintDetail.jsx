@@ -219,6 +219,7 @@ const AdminComplaintDetail = () => {
     try {
       await apiService.reassignComplaint(complaint.complaint_id, {
         officer_id: reassignOfficerId,
+        level_id: selectedLevel || complaint.current_level?.id || '',
         reason: reassignReason || 'Reassigned by admin',
       });
 

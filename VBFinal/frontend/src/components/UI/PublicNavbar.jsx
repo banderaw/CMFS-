@@ -38,14 +38,31 @@ const PublicNavbar = () => {
     return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U';
   };
 
+  const headerClasses = isDark
+    ? 'bg-slate-950/90 border-slate-700/80'
+    : 'bg-white/90 border-blue-100';
+  const iconButtonClasses = isDark
+    ? 'text-slate-300 hover:bg-blue-500/15 hover:text-blue-200'
+    : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700';
+  const activeLinkClasses = isDark
+    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+    : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm';
+  const defaultLinkClasses = isDark
+    ? 'text-slate-300 hover:bg-blue-500/15 hover:text-blue-200'
+    : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700';
+  const userMenuTriggerClasses = isDark
+    ? 'hover:bg-blue-500/15'
+    : 'hover:bg-blue-50';
+  const dividerClasses = isDark ? 'bg-slate-600' : 'bg-blue-100';
+
   return (
-    <header className={`${isDark ? 'bg-gray-900/95 border-gray-700' : 'bg-white/95 border-gray-100'} backdrop-blur-md shadow-md border-b fixed top-0 left-0 right-0 z-50 relative`}>
+    <header className={`${headerClasses} backdrop-blur-md shadow-md border-b fixed top-0 left-0 right-0 z-50 relative`}>
       <nav className="px-6 sm:px-8 lg:px-12 h-20 flex items-center justify-between">
         {/* Logo */}
         <div className="flex items-center space-x-6 min-w-0">
           <button
             onClick={() => navigate(user ? getDashboardPath() : '/login')}
-            className={`p-2.5 rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'}`}
+            className={`p-2.5 rounded-lg transition-all duration-200 ${iconButtonClasses}`}
             title={user ? 'Go to Dashboard' : 'Sign In'}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -73,8 +90,8 @@ const PublicNavbar = () => {
           {navItems.map((item) => (
             <a key={item.name} href={item.path}
               className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${location.pathname === item.path || (item.path.includes('#') && location.pathname === '/landing')
-                ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
-                : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? activeLinkClasses
+                : defaultLinkClasses
                 }`}>
               {item.name}
             </a>
@@ -85,7 +102,7 @@ const PublicNavbar = () => {
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setMobileMenuOpen((prev) => !prev)}
-            className={`lg:hidden p-2.5 rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
+            className={`lg:hidden p-2.5 rounded-lg transition-all duration-200 ${iconButtonClasses}`}
             title="Toggle Menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -98,17 +115,17 @@ const PublicNavbar = () => {
           </button>
 
           <button onClick={toggleTheme}
-            className={`p-2.5 rounded-lg transition-all duration-200 ${isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
+            className={`p-2.5 rounded-lg transition-all duration-200 ${iconButtonClasses}`}
             title="Toggle Theme">
             {isDark ? '☀️' : '🌙'}
           </button>
 
-          <div className={`hidden sm:block h-8 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} style={{ width: '1px' }}></div>
+          <div className={`hidden sm:block h-8 ${dividerClasses}`} style={{ width: '1px' }}></div>
 
           {user ? (
             <div className="relative">
               <button onClick={() => setDropdownOpen(!dropdownOpen)}
-                className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}>
+                className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${userMenuTriggerClasses}`}>
                 <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm">
                   {getUserInitials()}
                 </div>
@@ -178,14 +195,14 @@ const PublicNavbar = () => {
       </nav>
 
       {/* Mobile Menu */}
-      <div className={`lg:hidden absolute top-full left-0 right-0 px-6 sm:px-8 pb-4 border-t shadow-md border-gray-200 dark:border-gray-700 ${isDark ? 'bg-gray-900/95' : 'bg-white/95'} ${mobileMenuOpen ? 'block' : 'hidden'}`}>
+      <div className={`lg:hidden absolute top-full left-0 right-0 px-6 sm:px-8 pb-4 border-t shadow-md ${isDark ? 'border-slate-700 bg-slate-950/95' : 'border-blue-100 bg-white/95'} ${mobileMenuOpen ? 'block' : 'hidden'}`}>
         <div className="flex flex-col space-y-2">
           {navItems.map((item) => (
             <a key={item.name} href={item.path}
               onClick={() => setMobileMenuOpen(false)}
               className={`px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-150 ${location.pathname === item.path
-                ? isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'
-                : isDark ? 'text-gray-300 hover:bg-gray-700 hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? activeLinkClasses
+                : defaultLinkClasses
                 }`}>
               {item.name}
             </a>

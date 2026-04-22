@@ -15,7 +15,6 @@ from .models import (
     MaintenanceConfiguration,
     Officer,
     PasswordResetToken,
-    Program,
     Student,
     StudentType,
     SystemLog,
@@ -29,7 +28,6 @@ from .serializers import (
     LoginSerializer,
     MaintenanceConfigurationSerializer,
     OfficerSerializer,
-    ProgramSerializer,
     RegisterSerializer,
     SelfUserSerializer,
     StudentSerializer,
@@ -409,11 +407,6 @@ class SystemLogViewSet(viewsets.ReadOnlyModelViewSet):
             'results': self.get_serializer(results, many=True).data,
         })
 
-class ProgramViewSet(PublicReadAdminWriteMixin, viewsets.ModelViewSet):
-    queryset = Program.objects.order_by('id')
-    serializer_class = ProgramSerializer
-
-
 class StudentTypeViewSet(PublicReadAdminWriteMixin, viewsets.ModelViewSet):
     queryset = StudentType.objects.order_by('id')
     serializer_class = StudentTypeSerializer
@@ -423,16 +416,13 @@ class StudentViewSet(AdminOnlyModelViewSet):
     serializer_class = StudentSerializer
 
     def get_queryset(self):
-        qs = Student.objects.select_related('user', 'student_type', 'department', 'program').order_by('id')
+        qs = Student.objects.select_related('user', 'student_type', 'department').order_by('id')
         student_type_id = self.request.query_params.get('student_type')
         department_id = self.request.query_params.get('department')
-        program_id = self.request.query_params.get('program')
         if student_type_id:
             qs = qs.filter(student_type_id=student_type_id)
         if department_id:
             qs = qs.filter(department_id=department_id)
-        if program_id:
-            qs = qs.filter(program_id=program_id)
         return qs
 
 

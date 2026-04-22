@@ -375,6 +375,14 @@ const OfficerDashboard = () => {
     return '📎';
   };
 
+  const handleOpenAttachment = async (file) => {
+    try {
+      await apiService.openAuthenticatedFile(file.url, file.filename);
+    } catch (error) {
+      window.alert(error.message || 'Failed to open attachment');
+    }
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -729,7 +737,7 @@ const OfficerDashboard = () => {
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-      <DashboardNavbar onSidebarToggle={handleSidebarToggle} />
+      <DashboardNavbar onSidebarToggle={handleSidebarToggle} showOfficerNotifications />
 
       <div className="flex pt-20">
         {/* Sidebar */}
@@ -857,16 +865,14 @@ const OfficerDashboard = () => {
                                 </p>
                               </div>
                             </div>
-                            <a
-                              href={file.url}
-                              download={file.filename}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAttachment(file)}
                               className={`ml-2 flex-shrink-0 px-3 py-2 rounded text-sm font-medium transition-colors ${isDark ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-500 hover:bg-green-600 text-white'
                                 }`}
                             >
                               View
-                            </a>
+                            </button>
                           </div>
                         ))}
                       </div>
